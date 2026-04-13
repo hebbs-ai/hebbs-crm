@@ -8,6 +8,7 @@ import { CompanyForm } from "../components/CompanyForm";
 import { PropertyRow } from "../components/ui/PropertyRow";
 import { ActivityTimeline } from "../components/ActivityTimeline";
 import { Badge } from "../components/ui/Badge";
+import { EntityTasks } from "../components/EntityTasks";
 import type { Contact } from "@boringos-crm/shared";
 
 export function CompanyDetailPage() {
@@ -82,6 +83,11 @@ export function CompanyDetailPage() {
               ))}
             </div>
           )}
+
+          {/* Tasks */}
+          <div className="mt-6 mb-6">
+            <EntityTasks entityType="crm_company" entityId={company.id} />
+          </div>
 
           <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3 mt-6">Activity Timeline</h2>
           <ActivityTimeline activities={activities} />

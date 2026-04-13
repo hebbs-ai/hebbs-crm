@@ -11,6 +11,7 @@ import { PropertyRow } from "../components/ui/PropertyRow";
 import { ActivityTimeline } from "../components/ActivityTimeline";
 import { Badge } from "../components/ui/Badge";
 import { Input, Select, Textarea } from "../components/ui/FormField";
+import { EntityTasks } from "../components/EntityTasks";
 import type { Deal } from "@boringos-crm/shared";
 
 function formatCurrency(cents: number, currency = "USD"): string {
@@ -175,6 +176,11 @@ export function DealDetailPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Tasks */}
+          <div className="mb-6">
+            <EntityTasks entityType="crm_deal" entityId={deal.id} />
           </div>
 
           {/* Activity Timeline */}

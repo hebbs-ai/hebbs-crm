@@ -1,0 +1,208 @@
+import { useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import { useTask, useUpdateTask, usePostComment } from "../hooks/useTasks";
+import { PropertyRow } from "../components/ui/PropertyRow";
+import { Badge } from "../components/ui/Badge";
+
+const PRIORITY_COLORS: Record<string, "red" | "orange" | "yellow" | "gray"> = {
+  urgent: "red",
+  high: "orange",
+  medium: "yellow",
+  low: "gray",
+};
+
+const STATUS_COLORS: Record<string, "gray" | "blue" | "green" | "red"> = {
+  todo: "gray",
+  in_progress: "blue",
+  done: "green",
+  blocked: "red",
+};
+
+function formatStatus(s: string): string {
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function TaskDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { data, isLoading } = useTask(id);
+  const updateTask = useUpdateTask();
+  const postComment = usePostComment();
+  const [commentBody, setCommentBody] = useState("");
+
+  const task = data?.data;
+  const comments = (task as any)?.comments ?? [];
+  const workProducts = (task as any)?.workProducts ?? [];
+
+  if (isLoading) return <div className="p-8 text-sm text-text-secondary">Loading...</div>;
+  if (!task) return <div className="p-8 text-sm text-text-secondary">Task not found</div>;
+
+  const handleStatusChange = (newStatus: string) => {
+    updateTask.mutate({ id: task.id, status: newStatus });
+  };
+
+  const handlePostComment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentBody.trim()) return;
+    postComment.mutate(
+      { taskId: task.id, body: commentBody },
+      { onSuccess: () => setCommentBody("") },
+    );
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto p-8 pb-24 max-w-[1100px]">
+      <div className="mb-2">
+        <Link to="/tasks" className="text-sm text-text-secondary hover:text-text-primary">
+          {"\u2190"} Tasks
+        </Link>
+      </div>
+
+      <div className="mb-6">
+        <h1 className="text-[30px] font-bold tracking-tight leading-tight">{task.title}</h1>
+        <div className="mt-2 flex items-center gap-2">
+          {(task as any).identifier && (
+            <span className="text-sm text-text-tertiary font-mono">{(task as any).identifier}</span>
+          )}
+          <Badge color={STATUS_COLORS[task.status] ?? "gray"}>
+            {formatStatus(task.status)}
+          </Badge>
+          {task.priority && (
+            <Badge color={PRIORITY_COLORS[task.priority] ?? "gray"}>
+              {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+            </Badge>
+          )}
+        </div>
+        {task.description && (
+          <p className="mt-3 text-sm text-text-secondary leading-relaxed">{task.description}</p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-[1fr_340px] gap-8">
+        {/* Left: Comments */}
+        <div>
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">
+            Comments
+          </h2>
+
+          {comments.length === 0 ? (
+            <p className="text-sm text-text-tertiary py-4">No comments yet</p>
+          ) : (
+            <div className="space-y-3 mb-6">
+              {comments.map((c: any) => {
+                const isAgent = !!c.authorAgentId;
+                return (
+                  <div
+                    key={c.id}
+                    className={`rounded-lg p-3 text-sm ${
+                      isAgent
+                        ? "border-l-3 border-accent bg-bg-secondary"
+                        : "border border-border bg-bg"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium text-text-primary text-xs">
+                        {isAgent ? "Agent" : c.authorUserId ?? "User"}
+                      </span>
+                      {isAgent && (
+                        <Badge color="purple">Agent</Badge>
+                      )}
+                      <span className="text-[11px] text-text-tertiary ml-auto">
+                        {new Date(c.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="text-text-primary whitespace-pre-wrap">{c.body}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Post comment form */}
+          <form onSubmit={handlePostComment} className="mt-4">
+            <textarea
+              value={commentBody}
+              onChange={(e) => setCommentBody(e.target.value)}
+              placeholder="Write a comment..."
+              className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15 min-h-[80px] resize-y"
+            />
+            <div className="mt-2 flex justify-end">
+              <button
+                type="submit"
+                disabled={postComment.isPending || !commentBody.trim()}
+                className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+              >
+                {postComment.isPending ? "Sending..." : "Send"}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Right: Details */}
+        <div>
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">
+            Details
+          </h2>
+          <div className="rounded-lg border border-border p-4">
+            <PropertyRow label="Status">
+              <select
+                value={task.status}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="rounded-md border border-border bg-bg px-2 py-1 text-sm text-text-primary outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15"
+              >
+                <option value="todo">To Do</option>
+                <option value="in_progress">In Progress</option>
+                <option value="done">Done</option>
+                <option value="blocked">Blocked</option>
+              </select>
+            </PropertyRow>
+            <PropertyRow label="Priority">
+              {task.priority ? (
+                <Badge color={PRIORITY_COLORS[task.priority] ?? "gray"}>
+                  {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                </Badge>
+              ) : (
+                "\u2014"
+              )}
+            </PropertyRow>
+            <PropertyRow label="Assignee">
+              {task.assigneeAgentId ? (
+                <Badge color="purple">Agent</Badge>
+              ) : task.assigneeUserId ? (
+                task.assigneeUserId
+              ) : (
+                "\u2014"
+              )}
+            </PropertyRow>
+            <PropertyRow label="Created">
+              {new Date(task.createdAt).toLocaleDateString()}
+            </PropertyRow>
+            <PropertyRow label="Updated">
+              {new Date(task.updatedAt).toLocaleDateString()}
+            </PropertyRow>
+          </div>
+
+          {/* Work Products */}
+          {workProducts.length > 0 && (
+            <>
+              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3 mt-6">
+                Work Products
+              </h2>
+              <div className="rounded-lg border border-border">
+                {workProducts.map((wp: any, i: number) => (
+                  <div
+                    key={wp.id}
+                    className={`px-4 py-2.5 text-sm text-text-primary ${
+                      i < workProducts.length - 1 ? "border-b border-border" : ""
+                    }`}
+                  >
+                    {wp.title ?? wp.id}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

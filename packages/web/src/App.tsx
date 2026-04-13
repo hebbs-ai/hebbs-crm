@@ -9,6 +9,8 @@ import { CompaniesPage } from "./pages/Companies";
 import { ContactDetailPage } from "./pages/ContactDetail";
 import { CompanyDetailPage } from "./pages/CompanyDetail";
 import { DealDetailPage } from "./pages/DealDetail";
+import { TasksPage } from "./pages/Tasks";
+import { TaskDetailPage } from "./pages/TaskDetail";
 import { SettingsPage } from "./pages/Settings";
 import { LoginPage } from "./pages/Login";
 import { SignupPage } from "./pages/Signup";
@@ -60,6 +62,8 @@ function AppRoutes() {
         <Route path="companies" element={<CompaniesPage />} />
         <Route path="companies/:id" element={<CompanyDetailPage />} />
         <Route path="deals/:id" element={<DealDetailPage />} />
+        <Route path="tasks" element={<TasksPage />} />
+        <Route path="tasks/:id" element={<TaskDetailPage />} />
         <Route path="settings/team" element={<SettingsPage />} />
       </Route>
 

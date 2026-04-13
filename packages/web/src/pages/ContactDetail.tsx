@@ -8,6 +8,7 @@ import { ContactForm } from "../components/ContactForm";
 import { PropertyRow } from "../components/ui/PropertyRow";
 import { ActivityTimeline } from "../components/ActivityTimeline";
 import { Badge } from "../components/ui/Badge";
+import { EntityTasks } from "../components/EntityTasks";
 
 export function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,6 +68,11 @@ export function ContactDetailPage() {
       <div className="grid grid-cols-[1fr_340px] gap-8">
         {/* Left: Timeline */}
         <div>
+          {/* Tasks */}
+          <div className="mb-6">
+            <EntityTasks entityType="crm_contact" entityId={contact.id} />
+          </div>
+
           <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">Activity Timeline</h2>
           <ActivityTimeline activities={activities} />
         </div>

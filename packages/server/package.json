@@ -14,6 +14,7 @@
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
+    "@boringos/agent": "link:../../../boringos/packages/@boringos/agent",
     "@boringos/core": "link:../../../boringos/packages/@boringos/core",
     "@boringos/db": "link:../../../boringos/packages/@boringos/db",
     "@boringos/shared": "link:../../../boringos/packages/@boringos/shared",

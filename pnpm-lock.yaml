@@ -20,6 +20,9 @@ importers:
       '@boringos-crm/shared':
         specifier: workspace:*
         version: link:../shared
+      '@boringos/agent':
+        specifier: link:../../../boringos/packages/@boringos/agent
+        version: link:../../../boringos/packages/@boringos/agent
       '@boringos/core':
         specifier: link:../../../boringos/packages/@boringos/core
         version: link:../../../boringos/packages/@boringos/core

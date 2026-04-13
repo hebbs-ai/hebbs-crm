@@ -2,6 +2,8 @@ import { BoringOS } from "@boringos/core";
 import { createCrmRoutes } from "./routes/index.js";
 import { createCrmContext } from "./context.js";
 import { provisionCrmTenant } from "./tenant.js";
+import { crmSchemaProvider } from "./context-providers/crm-schema.js";
+import { createCrmUserContextProvider } from "./context-providers/crm-user-context.js";
 
 const app = new BoringOS({});
 
@@ -106,13 +108,20 @@ app.schema(`
   CREATE INDEX IF NOT EXISTS crm_activities_deal_idx ON crm_activities(tenant_id, deal_id);
 `);
 
+// CRM context providers — teach copilot about CRM data
+// Registered before listen() so they're in the context pipeline
+let dbRef: unknown = null;
+app.contextProvider(crmSchemaProvider);
+app.contextProvider(createCrmUserContextProvider(() => dbRef));
+
 // When a new tenant signs up, create the default sales pipeline
 app.onTenantCreated(async (db, tenantId) => {
   await provisionCrmTenant(db as any, tenantId);
 });
 
-// CRM data routes — framework auth middleware resolves session inside
+// CRM data routes
 app.beforeStart(async (ctx) => {
+  dbRef = ctx.db; // populate the lazy db reference for context providers
   const crmCtx = createCrmContext(ctx.db);
   app.route("/api/crm", createCrmRoutes(crmCtx));
 });
