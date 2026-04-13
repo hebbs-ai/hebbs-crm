@@ -1,11 +1,11 @@
 import { BoringOS } from "@boringos/core";
 import { createCrmRoutes } from "./routes/index.js";
-import { createAuthRoutes } from "./routes/auth.js";
 import { createCrmContext } from "./context.js";
+import { provisionCrmTenant } from "./tenant.js";
 
 const app = new BoringOS({});
 
-// CRM schema — all CRM tables
+// CRM-specific schema
 app.schema(`
   CREATE TABLE IF NOT EXISTS crm_contacts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -104,29 +104,16 @@ app.schema(`
   CREATE INDEX IF NOT EXISTS crm_activities_tenant_idx ON crm_activities(tenant_id);
   CREATE INDEX IF NOT EXISTS crm_activities_contact_idx ON crm_activities(tenant_id, contact_id);
   CREATE INDEX IF NOT EXISTS crm_activities_deal_idx ON crm_activities(tenant_id, deal_id);
-
-  CREATE TABLE IF NOT EXISTS crm_invitations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id),
-    email TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'staff',
-    code TEXT NOT NULL UNIQUE,
-    status TEXT NOT NULL DEFAULT 'pending',
-    invited_by TEXT NOT NULL,
-    expires_at TIMESTAMPTZ NOT NULL,
-    accepted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-  );
 `);
 
-// Use beforeStart — routes registered here get mounted during listen()
+// When a new tenant signs up, create the default sales pipeline
+app.onTenantCreated(async (db, tenantId) => {
+  await provisionCrmTenant(db as any, tenantId);
+});
+
+// CRM data routes — framework auth middleware resolves session inside
 app.beforeStart(async (ctx) => {
   const crmCtx = createCrmContext(ctx.db);
-
-  // CRM auth routes — no auth middleware (signup/login don't have sessions)
-  app.route("/api/crm/auth", createAuthRoutes(crmCtx));
-
-  // CRM data routes — auth middleware applied inside
   app.route("/api/crm", createCrmRoutes(crmCtx));
 });
 
