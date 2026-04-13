@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import Markdown from "react-markdown";
 import {
   useCopilotSessions,
   useCopilotSession,
@@ -94,8 +95,8 @@ function MessageBubble({ msg }: { msg: CopilotMessage }) {
       <div className="w-7 h-7 rounded-full bg-surface-blue text-text-blue flex items-center justify-center text-xs font-semibold shrink-0">
         &#9671;
       </div>
-      <div className="flex-1 bg-bg-secondary border-l-2 border-text-blue rounded-lg px-4 py-3 text-sm text-text-primary leading-relaxed whitespace-pre-wrap">
-        {msg.content}
+      <div className="flex-1 bg-bg-secondary border-l-2 border-text-blue rounded-lg px-4 py-3 text-sm text-text-primary leading-relaxed copilot-markdown">
+        <Markdown>{msg.content}</Markdown>
       </div>
     </div>
   );
