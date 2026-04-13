@@ -1,4 +1,5 @@
 import { BoringOS } from "@boringos/core";
+import { google } from "@boringos/connector-google";
 import { createCrmRoutes } from "./routes/index.js";
 import { createCrmContext } from "./context.js";
 import { provisionCrmTenant } from "./tenant.js";
@@ -6,6 +7,14 @@ import { crmSchemaProvider } from "./context-providers/crm-schema.js";
 import { createCrmUserContextProvider } from "./context-providers/crm-user-context.js";
 
 const app = new BoringOS({});
+
+// Register Google Workspace connector (Gmail + Calendar)
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  app.connector(google({
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  }));
+}
 
 // CRM-specific schema
 app.schema(`

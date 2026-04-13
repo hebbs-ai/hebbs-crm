@@ -1,13 +1,122 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { useTeamUsers, useInvitations, useInviteUser, useUpdateUserRole, useRemoveUser, useRevokeInvitation } from "../hooks/useTeam";
+import { useConnectorStatus, useDisconnectConnector } from "../hooks/useConnectors";
 import { Modal } from "../components/ui/Modal";
 import { Input, Select } from "../components/ui/FormField";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Badge } from "../components/ui/Badge";
 
+const CONNECTOR_ICONS: Record<string, string> = {
+  google: "\uD83D\uDCE7",
+  slack: "\uD83D\uDCAC",
+  github: "\uD83D\uDC19",
+};
+
+function ConnectorsTab() {
+  const { user } = useAuth();
+  const { data, isLoading } = useConnectorStatus();
+  const disconnect = useDisconnectConnector();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [successBanner, setSuccessBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    if (connected) {
+      setSuccessBanner(`${connected} connected successfully!`);
+      searchParams.delete("connected");
+      setSearchParams(searchParams, { replace: true });
+      const timer = setTimeout(() => setSuccessBanner(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, setSearchParams]);
+
+  const connectors = data?.connectors ?? [];
+  const tenantId = user?.tenantId;
+
+  const handleConnect = (kind: string) => {
+    window.location.href = `/api/connectors/oauth/${kind}/authorize?tenantId=${tenantId}`;
+  };
+
+  const handleDisconnect = async (kind: string) => {
+    if (confirm(`Disconnect ${kind}?`)) {
+      await disconnect.mutateAsync(kind);
+    }
+  };
+
+  if (isLoading) {
+    return <p className="text-sm text-text-secondary">Loading connectors...</p>;
+  }
+
+  return (
+    <div>
+      {successBanner && (
+        <div className="mb-4 rounded-md bg-surface-green px-4 py-2 text-sm text-text-green">
+          {successBanner}
+        </div>
+      )}
+
+      {connectors.length === 0 ? (
+        <p className="text-sm text-text-secondary">No connectors available.</p>
+      ) : (
+        <div className="grid gap-4">
+          {connectors.map((c) => (
+            <div
+              key={c.kind}
+              className="rounded-lg border border-border p-4 hover:bg-bg-secondary transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl w-10 h-10 flex items-center justify-center rounded-lg bg-bg-secondary">
+                  {CONNECTOR_ICONS[c.kind] ?? "\u26A1"}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-text-primary">{c.name}</span>
+                    <Badge color={c.connected ? "green" : "gray"}>
+                      {c.connected ? "Connected" : "Not connected"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-text-secondary mt-0.5">{c.description}</p>
+                  {c.connected && c.lastSyncAt && (
+                    <p className="text-xs text-text-tertiary mt-1">
+                      Last synced: {new Date(c.lastSyncAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  {c.connected ? (
+                    <button
+                      onClick={() => handleDisconnect(c.kind)}
+                      disabled={disconnect.isPending}
+                      className="rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-bg-hover hover:text-text-red transition-colors disabled:opacity-50"
+                    >
+                      Disconnect
+                    </button>
+                  ) : c.hasOAuth ? (
+                    <button
+                      onClick={() => handleConnect(c.kind)}
+                      className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
+                    >
+                      Connect
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<"team" | "connectors">(
+    searchParams.has("connected") ? "connectors" : "team"
+  );
   const { data: usersData, isLoading: usersLoading } = useTeamUsers();
   const { data: invitesData } = useInvitations();
   const inviteUser = useInviteUser();
@@ -42,6 +151,33 @@ export function SettingsPage() {
         subtitle={`${user?.tenantName ?? "Your organization"}`}
       />
 
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 border-b border-border">
+        <button
+          onClick={() => setActiveTab("team")}
+          className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === "team"
+              ? "border-accent text-text-primary"
+              : "border-transparent text-text-secondary hover:text-text-primary"
+          }`}
+        >
+          Team
+        </button>
+        <button
+          onClick={() => setActiveTab("connectors")}
+          className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === "connectors"
+              ? "border-accent text-text-primary"
+              : "border-transparent text-text-secondary hover:text-text-primary"
+          }`}
+        >
+          Connectors
+        </button>
+      </div>
+
+      {activeTab === "connectors" && <ConnectorsTab />}
+
+      {activeTab === "team" && <>
       {/* Team Members */}
       <section className="mb-10">
         <div className="flex items-center justify-between mb-4">
@@ -124,6 +260,8 @@ export function SettingsPage() {
           </div>
         </section>
       )}
+
+      </>}
 
       {/* Invite Modal */}
       <Modal open={showInvite} onClose={() => setShowInvite(false)} title="Invite Team Member">

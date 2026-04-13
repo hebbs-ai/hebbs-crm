@@ -23,6 +23,9 @@ importers:
       '@boringos/agent':
         specifier: link:../../../boringos/packages/@boringos/agent
         version: link:../../../boringos/packages/@boringos/agent
+      '@boringos/connector-google':
+        specifier: link:../../../boringos/packages/@boringos/connector-google
+        version: link:../../../boringos/packages/@boringos/connector-google
       '@boringos/core':
         specifier: link:../../../boringos/packages/@boringos/core
         version: link:../../../boringos/packages/@boringos/core

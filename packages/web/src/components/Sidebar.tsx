@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: "/deals", label: "Deals", icon: "\u2300" },
   { to: "/contacts", label: "Contacts", icon: "\u2636" },
   { to: "/companies", label: "Companies", icon: "\u2302" },
+  { to: "/inbox", label: "Inbox", icon: "\u2709" },
   { to: "/tasks", label: "Tasks", icon: "\u2611" },
   { to: "/copilot", label: "Copilot", icon: "\u25C7" },
 ];
