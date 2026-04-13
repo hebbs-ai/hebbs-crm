@@ -9,16 +9,24 @@ interface CopilotSession {
   updatedAt: string;
 }
 
-interface CopilotMessage {
+export interface CopilotMessage {
   id: string;
-  sessionId: string;
   role: "user" | "assistant";
   content: string;
   createdAt: string;
 }
 
-interface CopilotSessionDetail extends CopilotSession {
-  messages: CopilotMessage[];
+interface RawCopilotMessage {
+  id: string;
+  body: string;
+  role: "user" | "assistant";
+  agentId?: string;
+  createdAt: string;
+}
+
+interface CopilotSessionResponse {
+  session: CopilotSession;
+  messages: RawCopilotMessage[];
 }
 
 // --- Helpers ---
@@ -49,21 +57,35 @@ async function copilotFetch<T>(path: string, opts?: RequestInit): Promise<T> {
 export function useCopilotSessions() {
   return useQuery({
     queryKey: ["copilot", "sessions"],
-    queryFn: () => copilotFetch<{ data: CopilotSession[] }>("/sessions"),
+    queryFn: async () => {
+      const raw = await copilotFetch<{ sessions: CopilotSession[] }>("/sessions");
+      return { data: raw.sessions };
+    },
   });
 }
 
 export function useCopilotSession(id: string | undefined) {
   return useQuery({
     queryKey: ["copilot", "sessions", id],
-    queryFn: () =>
-      copilotFetch<{ data: CopilotSessionDetail }>(`/sessions/${id}`),
+    queryFn: async () => {
+      const raw = await copilotFetch<CopilotSessionResponse>(`/sessions/${id}`);
+      return {
+        data: {
+          ...raw.session,
+          messages: raw.messages.map((m): CopilotMessage => ({
+            id: m.id,
+            role: m.role,
+            content: m.body,
+            createdAt: m.createdAt,
+          })),
+        },
+      };
+    },
     enabled: !!id,
     refetchInterval: (query) => {
       const session = query.state.data?.data;
       if (!session?.messages?.length) return false;
       const lastMessage = session.messages[session.messages.length - 1];
-      // Poll while waiting for agent reply (last message is from user)
       return lastMessage.role === "user" ? 3000 : false;
     },
   });
@@ -72,11 +94,13 @@ export function useCopilotSession(id: string | undefined) {
 export function useCreateCopilotSession() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data?: { title?: string }) =>
-      copilotFetch<{ data: CopilotSession }>("/sessions", {
+    mutationFn: async (data?: { title?: string }) => {
+      const raw = await copilotFetch<{ id: string; title: string }>("/sessions", {
         method: "POST",
         body: JSON.stringify(data ?? {}),
-      }),
+      });
+      return { data: raw };
+    },
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["copilot", "sessions"] }),
   });
