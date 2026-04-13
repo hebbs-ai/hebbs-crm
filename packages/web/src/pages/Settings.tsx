@@ -36,7 +36,9 @@ function ConnectorsTab() {
   const tenantId = user?.tenantId;
 
   const handleConnect = (kind: string) => {
-    window.location.href = `/api/connectors/oauth/${kind}/authorize?tenantId=${tenantId}`;
+    // OAuth must go through the public API URL (not frontend proxy) so redirect_uri is correct
+    const apiBase = window.location.origin.replace("crm.", "crmapi.");
+    window.location.href = `${apiBase}/api/connectors/oauth/${kind}/authorize?tenantId=${tenantId}`;
   };
 
   const handleDisconnect = async (kind: string) => {
