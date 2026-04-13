@@ -1,0 +1,29 @@
+{
+  "name": "@boringos-crm/server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@boringos/core": "link:../../../boringos/packages/@boringos/core",
+    "@boringos/db": "link:../../../boringos/packages/@boringos/db",
+    "@boringos/shared": "link:../../../boringos/packages/@boringos/shared",
+    "@boringos-crm/shared": "workspace:*",
+    "drizzle-orm": "^0.41.0",
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.3"
+  }
+}
