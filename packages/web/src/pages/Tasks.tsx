@@ -103,7 +103,9 @@ export function TasksPage() {
   );
   const createTask = useCreateTask();
 
-  const tasks = data?.data ?? [];
+  const tasks = (data?.data ?? []).filter(
+    (t) => (t as any).originKind !== "copilot",
+  );
 
   const filters: { label: string; value: StatusFilter }[] = [
     { label: "All", value: "" },
