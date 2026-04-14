@@ -129,14 +129,59 @@ let dbRef: unknown = null;
 app.contextProvider(crmSchemaProvider);
 app.contextProvider(createCrmUserContextProvider(() => dbRef));
 
-// When a new tenant signs up, create the default sales pipeline
+// When a new tenant signs up, create the default sales pipeline + agents
 app.onTenantCreated(async (db, tenantId) => {
   await provisionCrmTenant(db as any, tenantId);
 });
 
+// Event-driven: wake Email Triage agent when new inbox items arrive
+let agentEngineRef: any = null;
+app.onEvent("inbox.item_created", async (event) => {
+  if (!agentEngineRef) return;
+  const db = dbRef as any;
+  if (!db) return;
+
+  // Find the email-triage agent for this tenant
+  const { agents } = await import("@boringos/db");
+  const { eq, and } = await import("drizzle-orm");
+  const rows = await db.select().from(agents)
+    .where(and(eq(agents.tenantId, event.tenantId), eq(agents.role, "email-triage")))
+    .limit(1);
+  const triageAgent = rows[0];
+  if (!triageAgent) return;
+
+  // Create a task for the agent with the inbox item ID
+  const { tasks } = await import("@boringos/db");
+  const { generateId } = await import("@boringos/shared");
+  const taskId = generateId();
+  await db.insert(tasks).values({
+    id: taskId,
+    tenantId: event.tenantId,
+    title: `Triage inbox item`,
+    description: `Analyze inbox item: ${event.data.itemId}\nSource: ${event.data.source}`,
+    status: "todo",
+    priority: "medium",
+    assigneeAgentId: triageAgent.id,
+    originKind: "agent-triage",
+  });
+
+  // Wake the agent
+  const outcome = await agentEngineRef.wake({
+    agentId: triageAgent.id,
+    tenantId: event.tenantId,
+    reason: "connector_event",
+    taskId,
+    payload: event.data,
+  });
+  if (outcome.kind === "created") {
+    await agentEngineRef.enqueue(outcome.wakeupRequestId);
+  }
+});
+
 // CRM data routes
 app.beforeStart(async (ctx) => {
-  dbRef = ctx.db; // populate the lazy db reference for context providers
+  dbRef = ctx.db;
+  agentEngineRef = ctx.agentEngine;
   const crmCtx = createCrmContext(ctx.db);
   app.route("/api/crm", createCrmRoutes(crmCtx));
 });

@@ -129,4 +129,24 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
         ${JSON.stringify({ accessToken: slackBotToken })}::jsonb, now(), now())
     `);
   }
+
+  // 5. Create Email Triage agent
+  // Framework already created copilot + runtimes. We create additional CRM agents.
+  try {
+    const { EMAIL_TRIAGE_INSTRUCTIONS } = await import("./agents/email-triage.js");
+    // Find the Claude runtime for this tenant
+    const rtResult = await db.execute(sql`
+      SELECT id FROM runtimes WHERE tenant_id = ${tenantId} AND type = 'claude' LIMIT 1
+    `);
+    const runtimeId = (rtResult as unknown as Array<{ id: string }>)[0]?.id;
+    if (runtimeId) {
+      await db.execute(sql`
+        INSERT INTO agents (id, tenant_id, name, role, status, instructions, runtime_id, created_at, updated_at)
+        VALUES (${randomUUID()}, ${tenantId}, 'Email Triage', 'email-triage', 'idle',
+          ${EMAIL_TRIAGE_INSTRUCTIONS}, ${runtimeId}, now(), now())
+      `);
+    }
+  } catch (err) {
+    console.warn(`[tenant] Failed to create Email Triage agent:`, err);
+  }
 }
