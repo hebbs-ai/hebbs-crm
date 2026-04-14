@@ -1,5 +1,6 @@
 import { BoringOS } from "@boringos/core";
 import { google } from "@boringos/connector-google";
+import { slack } from "@boringos/connector-slack";
 import { createCrmRoutes } from "./routes/index.js";
 import { createCrmContext } from "./context.js";
 import { provisionCrmTenant } from "./tenant.js";
@@ -8,11 +9,16 @@ import { createCrmUserContextProvider } from "./context-providers/crm-user-conte
 
 const app = new BoringOS({});
 
-// Register Google Workspace connector (Gmail + Calendar)
+// Register connectors
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   app.connector(google({
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  }));
+}
+if (process.env.SLACK_SIGNING_SECRET) {
+  app.connector(slack({
+    signingSecret: process.env.SLACK_SIGNING_SECRET,
   }));
 }
 

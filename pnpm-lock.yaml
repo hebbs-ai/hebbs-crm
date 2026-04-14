@@ -26,6 +26,9 @@ importers:
       '@boringos/connector-google':
         specifier: link:../../../boringos/packages/@boringos/connector-google
         version: link:../../../boringos/packages/@boringos/connector-google
+      '@boringos/connector-slack':
+        specifier: link:../../../boringos/packages/@boringos/connector-slack
+        version: link:../../../boringos/packages/@boringos/connector-slack
       '@boringos/core':
         specifier: link:../../../boringos/packages/@boringos/core
         version: link:../../../boringos/packages/@boringos/core

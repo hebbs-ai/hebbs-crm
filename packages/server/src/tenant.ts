@@ -119,4 +119,14 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
     VALUES (${randomUUID()}, ${tenantId}, 'Calendar Sync (every 15 min)', ${calWorkflowId},
       '*/15 * * * *', 'active', now(), now())
   `);
+
+  // 4. Auto-connect Slack if bot token is configured (server-level)
+  const slackBotToken = process.env.SLACK_BOT_TOKEN;
+  if (slackBotToken) {
+    await db.execute(sql`
+      INSERT INTO connectors (id, tenant_id, kind, status, config, credentials, created_at, updated_at)
+      VALUES (${randomUUID()}, ${tenantId}, 'slack', 'active', '{}',
+        ${JSON.stringify({ accessToken: slackBotToken })}::jsonb, now(), now())
+    `);
+  }
 }
