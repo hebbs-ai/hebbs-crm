@@ -167,4 +167,30 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
   } catch (err) {
     console.warn(`[tenant] Failed to create Enrichment agent:`, err);
   }
+
+  // 7. Create Deal Analyst agent + daily routine
+  try {
+    const { DEAL_ANALYST_INSTRUCTIONS } = await import("./agents/deal-analyst.js");
+    const rtResult3 = await db.execute(sql`
+      SELECT id FROM runtimes WHERE tenant_id = ${tenantId} AND type = 'claude' LIMIT 1
+    `);
+    const runtimeId3 = (rtResult3 as unknown as Array<{ id: string }>)[0]?.id;
+    if (runtimeId3) {
+      const dealAnalystId = randomUUID();
+      await db.execute(sql`
+        INSERT INTO agents (id, tenant_id, name, role, status, instructions, runtime_id, created_at, updated_at)
+        VALUES (${dealAnalystId}, ${tenantId}, 'Deal Analyst', 'deal-analyst', 'idle',
+          ${DEAL_ANALYST_INSTRUCTIONS}, ${runtimeId3}, now(), now())
+      `);
+
+      // Daily routine at 6 AM UTC
+      await db.execute(sql`
+        INSERT INTO routines (id, tenant_id, title, assignee_agent_id, cron_expression, status, created_at, updated_at)
+        VALUES (${randomUUID()}, ${tenantId}, 'Deal Analysis (daily)', ${dealAnalystId},
+          '0 6 * * *', 'active', now(), now())
+      `);
+    }
+  } catch (err) {
+    console.warn(`[tenant] Failed to create Deal Analyst agent:`, err);
+  }
 }

@@ -2,7 +2,27 @@ import { useState, useMemo, useCallback, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 import { usePipelines, usePipeline } from "../hooks/usePipelines";
 import { useDeals, useForecast, useUpdateDeal } from "../hooks/useDeals";
+import { useContacts } from "../hooks/useContacts";
 import type { Deal, PipelineStage } from "@boringos-crm/shared";
+
+// ---------------------------------------------------------------------------
+// Agent Intelligence type
+// ---------------------------------------------------------------------------
+
+interface AgentIntelligence {
+  riskLevel: "low" | "medium" | "high" | "critical";
+  signals: string[];
+  narrative: string;
+  suggestedNextStep: string;
+  smartProbability: number;
+  analyzedAt: string;
+}
+
+function getAgentIntelligence(deal: Deal): AgentIntelligence | null {
+  const ai = deal.customFields?.agentIntelligence;
+  if (!ai || typeof ai !== "object") return null;
+  return ai as unknown as AgentIntelligence;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -44,11 +64,34 @@ function signalColor(days: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Signal tag helpers
+// ---------------------------------------------------------------------------
+
+function signalTagColor(signal: string): string {
+  const lower = signal.toLowerCase();
+  if (lower.includes("silent") || lower.includes("overdue")) return "bg-surface-red text-text-red";
+  if (lower.includes("blocker")) return "bg-surface-yellow text-text-yellow";
+  if (lower.includes("closing") || lower.includes("ready")) return "bg-surface-green text-text-green";
+  return "bg-bg-hover text-text-tertiary";
+}
+
+// ---------------------------------------------------------------------------
 // Deal Card
 // ---------------------------------------------------------------------------
 
-function DealCard({ deal, onDragStart }: { deal: Deal; onDragStart: (e: DragEvent, deal: Deal) => void }) {
+function DealCard({
+  deal,
+  contactName,
+  onDragStart,
+}: {
+  deal: Deal;
+  contactName: string | null;
+  onDragStart: (e: DragEvent, deal: Deal) => void;
+}) {
   const days = daysSince(deal.updatedAt);
+  const intelligence = getAgentIntelligence(deal);
+  const isAtRisk = intelligence && (intelligence.riskLevel === "high" || intelligence.riskLevel === "critical");
+  const signals = intelligence?.signals ?? [];
 
   return (
     <div
@@ -56,18 +99,51 @@ function DealCard({ deal, onDragStart }: { deal: Deal; onDragStart: (e: DragEven
       onDragStart={(e) => onDragStart(e, deal)}
       className="border border-border rounded-md p-3 bg-bg hover:shadow-sm hover:border-border-dark transition-all cursor-grab active:cursor-grabbing"
     >
-      <Link
-        to={`/deals/${deal.id}`}
-        className="font-semibold text-sm text-text-primary hover:underline block mb-0.5"
-      >
-        {deal.title}
-      </Link>
-      <div className="text-[13px] text-text-secondary mb-1.5">
+      <div className="flex items-start justify-between gap-1 mb-0.5">
+        <Link
+          to={`/deals/${deal.id}`}
+          className="font-semibold text-sm text-text-primary hover:underline block"
+        >
+          {deal.title}
+        </Link>
+        {isAtRisk && (
+          <span className="text-text-red text-xs shrink-0" title={`Risk: ${intelligence.riskLevel}`}>
+            {"\u26A0"}
+          </span>
+        )}
+      </div>
+
+      <div className="text-[13px] text-text-secondary mb-1">
         {formatValueFull(deal.value)}
       </div>
+
+      {contactName && (
+        <div className="text-[11px] text-text-tertiary mb-1.5 truncate">
+          {contactName}
+        </div>
+      )}
+
+      {/* Signal tags */}
+      {signals.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {signals.map((signal, i) => (
+            <span
+              key={i}
+              className={`inline-block text-[10px] font-medium rounded-full px-1.5 py-0.5 leading-none ${signalTagColor(signal)}`}
+            >
+              {signal}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <span className="text-xs text-text-tertiary">
-          {deal.probability != null ? `${Math.round(deal.probability * 100)}%` : ""}
+          {intelligence
+            ? `${intelligence.smartProbability}%`
+            : deal.probability != null
+              ? `${deal.probability}%`
+              : ""}
         </span>
         <span className={`text-xs ${signalColor(days)}`}>
           {signalText(days)}
@@ -84,11 +160,13 @@ function DealCard({ deal, onDragStart }: { deal: Deal; onDragStart: (e: DragEven
 function StageColumn({
   stage,
   deals,
+  contactMap,
   onDragStart,
   onDrop,
 }: {
   stage: PipelineStage;
   deals: Deal[];
+  contactMap: Map<string, string>;
   onDragStart: (e: DragEvent, deal: Deal) => void;
   onDrop: (e: DragEvent, stage: PipelineStage) => void;
 }) {
@@ -134,7 +212,12 @@ function StageColumn({
       {/* Deal cards */}
       <div className="space-y-1.5">
         {deals.map((deal) => (
-          <DealCard key={deal.id} deal={deal} onDragStart={onDragStart} />
+          <DealCard
+            key={deal.id}
+            deal={deal}
+            contactName={deal.contactId ? (contactMap.get(deal.contactId) ?? null) : null}
+            onDragStart={onDragStart}
+          />
         ))}
         {deals.length === 0 && (
           <div className="text-xs text-text-tertiary px-3 py-6 text-center">
@@ -142,6 +225,76 @@ function StageColumn({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Agent Notes Section
+// ---------------------------------------------------------------------------
+
+function AgentNotesSection({ deals, forecast }: { deals: Deal[]; forecast: { totalWeightedValue: number } | undefined }) {
+  const dealsWithIntel = deals.filter((d) => getAgentIntelligence(d) !== null);
+  const atRiskDeals = dealsWithIntel.filter((d) => {
+    const intel = getAgentIntelligence(d)!;
+    return intel.riskLevel === "high" || intel.riskLevel === "critical";
+  });
+
+  if (dealsWithIntel.length === 0) {
+    return (
+      <div className="mt-4 bg-bg-secondary border-l-2 border-accent rounded-lg px-4 py-3">
+        <div className="text-sm font-medium text-text-primary mb-1">
+          {"\uD83E\uDD16"} Agent Notes on this Pipeline
+        </div>
+        <div className="text-[13px] text-text-tertiary italic">
+          Deal Analyst runs daily at 6 AM — pipeline notes will appear here
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 bg-bg-secondary border-l-2 border-accent rounded-lg px-4 py-3">
+      <div className="text-sm font-medium text-text-primary mb-2">
+        {"\uD83E\uDD16"} Agent Notes on this Pipeline
+      </div>
+
+      {atRiskDeals.length > 0 && (
+        <div className="mb-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-1.5">
+            At-risk deals ({atRiskDeals.length})
+          </div>
+          <ul className="space-y-1.5">
+            {atRiskDeals.map((deal) => {
+              const intel = getAgentIntelligence(deal)!;
+              return (
+                <li key={deal.id} className="flex items-start gap-2 text-[13px]">
+                  <span className="text-text-red shrink-0">{"\u26A0"}</span>
+                  <div>
+                    <Link to={`/deals/${deal.id}`} className="font-medium text-text-primary hover:underline">
+                      {deal.title}
+                    </Link>
+                    <span className="text-text-secondary ml-1.5">
+                      — {intel.signals.join(", ")}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {forecast && (
+        <div className="text-[13px] text-text-secondary">
+          Pipeline weighted value: <strong className="text-text-primary">{formatValueFull(forecast.totalWeightedValue)}</strong>
+          {atRiskDeals.length > 0 && (
+            <span className="text-text-tertiary">
+              {" "}({atRiskDeals.length} deal{atRiskDeals.length !== 1 ? "s" : ""} at risk)
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -176,6 +329,16 @@ export function PipelinePage() {
     activePipelineId ? { pipelineId: activePipelineId } : undefined,
   );
   const deals = dealsRes?.data ?? [];
+
+  // Fetch contacts for deal cards
+  const { data: contactsRes } = useContacts();
+  const contactMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of contactsRes?.data ?? []) {
+      map.set(c.id, `${c.firstName} ${c.lastName}`);
+    }
+    return map;
+  }, [contactsRes]);
 
   // Forecast
   const { data: forecastRes } = useForecast(activePipelineId);
@@ -306,6 +469,7 @@ export function PipelinePage() {
               key={stage.id}
               stage={stage}
               deals={dealsByStage.get(stage.id) ?? []}
+              contactMap={contactMap}
               onDragStart={handleDragStart}
               onDrop={handleDrop}
             />
@@ -313,15 +477,8 @@ export function PipelinePage() {
         </div>
       )}
 
-      {/* Agent Notes placeholder */}
-      <div className="mt-4 border border-border rounded-md p-4 bg-bg">
-        <div className="text-xs font-semibold text-text-tertiary uppercase tracking-wide mb-2">
-          Pipeline Intelligence
-        </div>
-        <div className="text-[13px] text-text-secondary leading-relaxed">
-          Agent notes will appear here with insights about at-risk deals, engagement signals, and forecast confidence.
-        </div>
-      </div>
+      {/* Agent Notes Section */}
+      <AgentNotesSection deals={deals} forecast={forecast} />
     </div>
   );
 }
