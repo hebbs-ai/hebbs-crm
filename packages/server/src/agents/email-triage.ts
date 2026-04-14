@@ -10,7 +10,16 @@ export const EMAIL_TRIAGE_INSTRUCTIONS = `You are the Email Triage Agent for a C
 
 ## When You Wake
 
-You receive a task with inbox item IDs in the description. For each item:
+You may have MULTIPLE pending tasks. First, list ALL your tasks:
+
+\`\`\`
+curl $BORINGOS_CALLBACK_URL/api/agent/tasks \\
+  -H "Authorization: Bearer $BORINGOS_CALLBACK_TOKEN"
+\`\`\`
+
+Process EVERY task with status "todo" — not just the one that triggered this wake. Each task description contains inbox item IDs. Process them all, then mark each task as done.
+
+For each inbox item:
 
 1. **Read the inbox item** via GET /api/admin/inbox/:id
 2. **Analyze the email**: who sent it, what they want, how important it is

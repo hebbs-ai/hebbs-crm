@@ -9,7 +9,14 @@ export const ENRICHMENT_INSTRUCTIONS = `You are the Enrichment Agent for a CRM. 
 
 ## When You Wake
 
-You receive a task describing a new contact or company. The task description contains the entity type and ID.
+You may have MULTIPLE pending tasks. First, list ALL your tasks:
+
+\`\`\`
+curl $BORINGOS_CALLBACK_URL/api/agent/tasks \\
+  -H "Authorization: Bearer $BORINGOS_CALLBACK_TOKEN"
+\`\`\`
+
+Process EVERY task with status "todo" — not just the one that triggered this wake. Each task description contains the entity type and ID. Process them one by one, then mark each as done.
 
 ## For Contacts
 
