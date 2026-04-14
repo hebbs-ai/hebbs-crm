@@ -134,55 +134,76 @@ app.onTenantCreated(async (db, tenantId) => {
   await provisionCrmTenant(db as any, tenantId);
 });
 
-// Event-driven: wake Email Triage agent when new inbox items arrive
+// Helper: find agent by role for a tenant, create task, wake it
 let agentEngineRef: any = null;
-app.onEvent("inbox.item_created", async (event) => {
-  if (!agentEngineRef) return;
+async function wakeAgentByRole(
+  role: string, tenantId: string,
+  taskTitle: string, taskDescription: string, taskOriginKind: string,
+  payload: Record<string, unknown>,
+) {
+  if (!agentEngineRef || !dbRef) return;
   const db = dbRef as any;
-  if (!db) return;
+  const { sql } = await import("drizzle-orm");
 
-  // Find the email-triage agent for this tenant
-  const { agents } = await import("@boringos/db");
-  const { eq, and } = await import("drizzle-orm");
-  const rows = await db.select().from(agents)
-    .where(and(eq(agents.tenantId, event.tenantId), eq(agents.role, "email-triage")))
-    .limit(1);
-  const triageAgent = rows[0];
-  if (!triageAgent) return;
+  const agentRows = await db.execute(sql`
+    SELECT id FROM agents WHERE tenant_id = ${tenantId} AND role = ${role} LIMIT 1
+  `);
+  const agentId = (agentRows as any)[0]?.id;
+  if (!agentId) return;
 
-  // Create a task for the agent with the inbox item ID
-  const { tasks } = await import("@boringos/db");
-  const { generateId } = await import("@boringos/shared");
-  const taskId = generateId();
-  await db.insert(tasks).values({
-    id: taskId,
-    tenantId: event.tenantId,
-    title: `Triage inbox item`,
-    description: `Analyze inbox item: ${event.data.itemId}\nSource: ${event.data.source}`,
-    status: "todo",
-    priority: "medium",
-    assigneeAgentId: triageAgent.id,
-    originKind: "agent-triage",
-  });
+  const { randomUUID } = await import("node:crypto");
+  const taskId = randomUUID();
+  await db.execute(sql`
+    INSERT INTO tasks (id, tenant_id, title, description, status, priority, assignee_agent_id, origin_kind, created_at, updated_at)
+    VALUES (${taskId}, ${tenantId}, ${taskTitle}, ${taskDescription}, 'todo', 'medium', ${agentId}, ${taskOriginKind}, now(), now())
+  `);
 
-  // Wake the agent
   const outcome = await agentEngineRef.wake({
-    agentId: triageAgent.id,
-    tenantId: event.tenantId,
-    reason: "connector_event",
-    taskId,
-    payload: event.data,
+    agentId, tenantId, reason: "connector_event", taskId, payload,
   });
   if (outcome.kind === "created") {
     await agentEngineRef.enqueue(outcome.wakeupRequestId);
   }
+}
+
+// Event-driven: wake Email Triage agent when new inbox items arrive
+app.onEvent("inbox.item_created", async (event) => {
+  await wakeAgentByRole(
+    "email-triage", event.tenantId,
+    "Triage inbox item",
+    `Analyze inbox item: ${event.data.itemId}\nSource: ${event.data.source}`,
+    "agent-triage",
+    event.data as Record<string, unknown>,
+  );
+});
+
+// Event-driven: wake Enrichment agent when new contacts/companies are created
+app.onEvent("entity.created", async (event) => {
+  const { entityType, entityId } = event.data as { entityType: string; entityId: string };
+  if (entityType !== "crm_contact" && entityType !== "crm_company") return;
+  const label = entityType === "crm_contact" ? "contact" : "company";
+  await wakeAgentByRole(
+    "enrichment", event.tenantId,
+    `Enrich ${label}`,
+    `Research and enrich ${label}: ${entityId}\nEntity type: ${entityType}\nEntity ID: ${entityId}`,
+    "agent-enrichment",
+    event.data as Record<string, unknown>,
+  );
 });
 
 // CRM data routes
 app.beforeStart(async (ctx) => {
   dbRef = ctx.db;
   agentEngineRef = ctx.agentEngine;
-  const crmCtx = createCrmContext(ctx.db);
+  const crmCtx = createCrmContext(ctx.db, (type, tenantId, data) => {
+    ctx.eventBus?.emit({
+      connectorKind: "crm",
+      type,
+      tenantId,
+      data,
+      timestamp: new Date(),
+    }).catch(() => {});
+  });
   app.route("/api/crm", createCrmRoutes(crmCtx));
 });
 

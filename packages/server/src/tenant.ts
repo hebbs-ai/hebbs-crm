@@ -149,4 +149,22 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
   } catch (err) {
     console.warn(`[tenant] Failed to create Email Triage agent:`, err);
   }
+
+  // 6. Create Enrichment agent
+  try {
+    const { ENRICHMENT_INSTRUCTIONS } = await import("./agents/enrichment.js");
+    const rtResult2 = await db.execute(sql`
+      SELECT id FROM runtimes WHERE tenant_id = ${tenantId} AND type = 'claude' LIMIT 1
+    `);
+    const runtimeId2 = (rtResult2 as unknown as Array<{ id: string }>)[0]?.id;
+    if (runtimeId2) {
+      await db.execute(sql`
+        INSERT INTO agents (id, tenant_id, name, role, status, instructions, runtime_id, created_at, updated_at)
+        VALUES (${randomUUID()}, ${tenantId}, 'Enrichment', 'enrichment', 'idle',
+          ${ENRICHMENT_INSTRUCTIONS}, ${runtimeId2}, now(), now())
+      `);
+    }
+  } catch (err) {
+    console.warn(`[tenant] Failed to create Enrichment agent:`, err);
+  }
 }

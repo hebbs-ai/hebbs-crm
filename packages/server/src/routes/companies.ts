@@ -59,6 +59,9 @@ export function createCompanyRoutes(ctx: CrmContext) {
       companyId: created.id,
     });
 
+    // Emit event for enrichment agent
+    ctx.emitEvent?.("entity.created", tenantId, { entityType: "crm_company", entityId: created.id });
+
     return c.json({ data: created }, 201);
   });
 
