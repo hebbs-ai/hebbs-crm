@@ -120,7 +120,7 @@ export function useTasks(filters?: TaskFilters) {
       if (filters?.assigneeAgentId)
         params.set("assigneeAgentId", filters.assigneeAgentId);
       const qs = params.toString();
-      return taskFetch<{ data: Task[] }>(qs ? `?${qs}` : "");
+      return taskFetch<{ tasks: Task[] }>(qs ? `?${qs}` : "").then((r) => ({ data: r.tasks }));
     },
   });
 }
@@ -128,7 +128,9 @@ export function useTasks(filters?: TaskFilters) {
 export function useTask(id: string | undefined) {
   return useQuery({
     queryKey: ["tasks", id],
-    queryFn: () => taskFetch<{ data: TaskDetail }>(`/${id}`),
+    queryFn: () => taskFetch<{ task: Task; comments: TaskComment[]; workProducts: WorkProduct[] }>(`/${id}`).then((r) => ({
+      data: { ...r.task, comments: r.comments ?? [], workProducts: r.workProducts ?? [], runs: [], costSummary: { totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0, runCount: 0, models: [] } } as TaskDetail,
+    })),
     enabled: !!id,
   });
 }
