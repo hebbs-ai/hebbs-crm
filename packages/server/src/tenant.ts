@@ -219,4 +219,30 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
   } catch (err) {
     console.warn(`[tenant] Failed to create Follow-up Writer agent:`, err);
   }
+
+  // 9. Create Meeting Prep agent + routine (every 30 min, paused until Google connected)
+  try {
+    const { MEETING_PREP_INSTRUCTIONS } = await import("./agents/meeting-prep.js");
+    const rtResult5 = await db.execute(sql`
+      SELECT id FROM runtimes WHERE tenant_id = ${tenantId} AND type = 'claude' LIMIT 1
+    `);
+    const runtimeId5 = (rtResult5 as unknown as Array<{ id: string }>)[0]?.id;
+    if (runtimeId5) {
+      const meetingPrepId = randomUUID();
+      await db.execute(sql`
+        INSERT INTO agents (id, tenant_id, name, role, status, instructions, runtime_id, created_at, updated_at)
+        VALUES (${meetingPrepId}, ${tenantId}, 'Meeting Prep', 'meeting-prep', 'idle',
+          ${MEETING_PREP_INSTRUCTIONS}, ${runtimeId5}, now(), now())
+      `);
+
+      // Every 30 min, paused until Google Calendar connected
+      await db.execute(sql`
+        INSERT INTO routines (id, tenant_id, title, assignee_agent_id, cron_expression, status, created_at, updated_at)
+        VALUES (${randomUUID()}, ${tenantId}, 'Meeting Prep (every 30 min)', ${meetingPrepId},
+          '*/30 * * * *', 'paused', now(), now())
+      `);
+    }
+  } catch (err) {
+    console.warn(`[tenant] Failed to create Meeting Prep agent:`, err);
+  }
 }
