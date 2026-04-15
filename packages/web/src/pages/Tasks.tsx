@@ -103,8 +103,9 @@ export function TasksPage() {
   );
   const createTask = useCreateTask();
 
+  const HIDDEN_ORIGINS = ["copilot", "agent-triage", "agent-enrichment"];
   const tasks = (data?.data ?? []).filter(
-    (t) => (t as any).originKind !== "copilot",
+    (t) => !HIDDEN_ORIGINS.includes((t as any).originKind ?? ""),
   );
 
   const filters: { label: string; value: StatusFilter }[] = [
