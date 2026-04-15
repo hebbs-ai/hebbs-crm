@@ -233,7 +233,7 @@ export function TasksPage() {
                   )}
                 </td>
                 <td className="px-3 py-2.5 border-b border-border text-sm text-text-secondary">
-                  {new Date(t.createdAt).toLocaleDateString()}
+                  {new Date(t.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </td>
               </tr>
             ))}
