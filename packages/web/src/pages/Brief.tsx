@@ -4,7 +4,70 @@ import { useAuth } from "../lib/auth";
 import { useDeals, useForecast } from "../hooks/useDeals";
 import { usePipelines } from "../hooks/usePipelines";
 import { useActivities } from "../hooks/useActivities";
+import { useTasks } from "../hooks/useTasks";
+import { useInbox } from "../hooks/useInbox";
 import type { Deal, Activity, ForecastEntry } from "@boringos-crm/shared";
+
+// ── Types ──
+
+interface AgentIntelligence {
+  riskLevel: "low" | "medium" | "high" | "critical";
+  signals: string[];
+  narrative: string;
+  suggestedNextStep: string;
+  smartProbability: number;
+  analyzedAt: string;
+}
+
+interface FrameworkTask {
+  id: string;
+  title: string;
+  description?: string;
+  priority?: string;
+  status: string;
+  assigneeUserId?: string;
+  assigneeAgentId?: string;
+  parentId?: string;
+  createdAt: string;
+  updatedAt: string;
+  originKind?: string;
+}
+
+interface InboxItem {
+  id: string;
+  source: string;
+  sourceId: string;
+  subject: string;
+  body: string;
+  from: string;
+  status: string;
+  assigneeUserId: string | null;
+  metadata: Record<string, unknown>;
+  linkedTaskId: string | null;
+  createdAt: string;
+}
+
+interface AgentAnalysis {
+  score: number;
+  summary?: string;
+}
+
+// ── Attention item union ──
+
+type AttentionItem =
+  | { kind: "at-risk-deal"; deal: Deal; intelligence: AgentIntelligence; daysSilent: number }
+  | { kind: "agent-task"; task: FrameworkTask }
+  | { kind: "high-inbox"; item: InboxItem; analysis: AgentAnalysis };
+
+// ── Overnight item ──
+
+interface OvernightItem {
+  id: string;
+  icon: string;
+  description: string;
+  time: string;
+  link?: string;
+}
 
 // ── Helpers ──
 
@@ -52,12 +115,27 @@ function greeting(): string {
   return "Good evening";
 }
 
-const todayStr = new Date().toLocaleDateString("en-US", {
-  weekday: "long",
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-});
+function formatDateHeader(): string {
+  return new Date().toLocaleDateString("en-US", { month: "long", day: "numeric" });
+}
+
+function getAgentIntelligence(deal: Deal): AgentIntelligence | null {
+  const ai = deal.customFields?.agentIntelligence;
+  if (!ai || typeof ai !== "object") return null;
+  return ai as unknown as AgentIntelligence;
+}
+
+function getAgentAnalysis(item: InboxItem): AgentAnalysis | null {
+  const meta = item.metadata;
+  if (!meta) return null;
+  const analysis = meta.agentAnalysis;
+  if (!analysis || typeof analysis !== "object") return null;
+  return analysis as unknown as AgentAnalysis;
+}
+
+function isLast24Hours(dateStr: string): boolean {
+  return Date.now() - new Date(dateStr).getTime() < 86_400_000;
+}
 
 const ACTIVITY_ICONS: Record<string, string> = {
   call: "\u{1F4DE}",
@@ -78,55 +156,136 @@ function MetricCard({ value, label }: { value: string; label: string }) {
   );
 }
 
-function BriefCard({
-  icon,
-  title,
-  time,
-  body,
-  dealId,
-}: {
-  icon: string;
-  title: string;
-  time?: string;
-  body: string;
-  dealId?: string | null;
-}) {
+function AgentInsight({ text }: { text: string }) {
   return (
-    <div className="border border-border rounded-lg p-4 hover:shadow-sm transition-shadow">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-base">{icon}</span>
-        <span className="font-semibold text-sm text-text-primary">{title}</span>
-        {time && <span className="ml-auto text-xs text-text-tertiary">{time}</span>}
+    <div className="bg-bg-secondary border-l-2 border-accent rounded-lg px-4 py-3 mt-2">
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="text-xs">🤖</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
+          Agent insight
+        </span>
       </div>
-      <p className="text-sm text-text-secondary pl-[26px] mb-2.5">{body}</p>
-      {dealId && (
-        <div className="flex gap-1.5 pl-[26px]">
-          <Link
-            to={`/deals/${dealId}`}
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors"
-          >
-            View deal
-          </Link>
-        </div>
-      )}
+      <p className="text-sm text-text-secondary">{text}</p>
     </div>
   );
 }
 
-function ActivityRow({ activity }: { activity: Activity }) {
+function AttentionCard({ item }: { item: AttentionItem }) {
+  if (item.kind === "at-risk-deal") {
+    const { deal, intelligence, daysSilent } = item;
+    return (
+      <div className="border border-border rounded-lg p-4 hover:shadow-sm transition-shadow">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-base">⚠️</span>
+          <span className="font-semibold text-sm text-text-primary">{deal.title}</span>
+          <span className="ml-auto text-xs text-text-tertiary">
+            {daysSilent}d silent
+          </span>
+        </div>
+        <p className="text-sm text-text-secondary pl-[26px] mb-2">
+          {centsToFull(deal.value)} &middot; {intelligence.riskLevel} risk &middot; {daysSilent} days
+          without activity
+        </p>
+        <div className="pl-[26px]">
+          <AgentInsight text={intelligence.suggestedNextStep} />
+        </div>
+        <div className="flex gap-1.5 pl-[26px] mt-3">
+          <Link
+            to={`/deals/${deal.id}`}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors"
+          >
+            View deal
+          </Link>
+          <Link
+            to={`/deals/${deal.id}?action=follow-up`}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium border border-border text-text-secondary hover:bg-bg-secondary transition-colors"
+          >
+            Send follow-up
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (item.kind === "agent-task") {
+    const { task } = item;
+    return (
+      <div className="border border-border rounded-lg p-4 hover:shadow-sm transition-shadow">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-base">📝</span>
+          <span className="font-semibold text-sm text-text-primary">{task.title}</span>
+          <span className="ml-auto text-xs text-text-tertiary">
+            {relativeTime(task.createdAt)}
+          </span>
+        </div>
+        {task.description && (
+          <p className="text-sm text-text-secondary pl-[26px] mb-2 line-clamp-2">
+            {task.description}
+          </p>
+        )}
+        <div className="pl-[26px]">
+          <AgentInsight text="Agent drafted this for your review." />
+        </div>
+        <div className="flex gap-1.5 pl-[26px] mt-3">
+          <Link
+            to={`/tasks/${task.id}`}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors"
+          >
+            View draft
+          </Link>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium border border-border text-text-secondary hover:bg-bg-secondary transition-colors"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // high-inbox
+  const { item: inboxItem, analysis } = item;
+  return (
+    <div className="border border-border rounded-lg p-4 hover:shadow-sm transition-shadow">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-base">✉️</span>
+        <span className="font-semibold text-sm text-text-primary">{inboxItem.subject}</span>
+        <span className="ml-auto text-xs text-text-tertiary">
+          {relativeTime(inboxItem.createdAt)}
+        </span>
+      </div>
+      <p className="text-sm text-text-secondary pl-[26px] mb-2">
+        From: {inboxItem.from}
+      </p>
+      {analysis.summary && (
+        <div className="pl-[26px]">
+          <AgentInsight text={analysis.summary} />
+        </div>
+      )}
+      <div className="flex gap-1.5 pl-[26px] mt-3">
+        <Link
+          to="/inbox"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors"
+        >
+          View inbox
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function OvernightRow({ item }: { item: OvernightItem }) {
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-b-0">
-      <span className="text-base shrink-0">{ACTIVITY_ICONS[activity.type] ?? "\u25CB"}</span>
+      <span className="text-base shrink-0">{item.icon}</span>
       <div className="flex-1 min-w-0">
-        <span className="text-sm text-text-primary truncate block">{activity.subject}</span>
+        <span className="text-sm text-text-primary truncate block">{item.description}</span>
       </div>
-      <span className="text-xs text-text-tertiary shrink-0">{relativeTime(activity.occurredAt)}</span>
-      {activity.dealId && (
-        <Link
-          to={`/deals/${activity.dealId}`}
-          className="text-xs text-accent hover:underline shrink-0"
-        >
-          View deal &rarr;
+      <span className="text-xs text-text-tertiary shrink-0">{relativeTime(item.time)}</span>
+      {item.link && (
+        <Link to={item.link} className="text-xs text-accent hover:underline shrink-0">
+          View &rarr;
         </Link>
       )}
     </div>
@@ -149,11 +308,20 @@ function SkeletonBlock() {
   );
 }
 
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">
+      {children}
+    </div>
+  );
+}
+
 // ── Page ──
 
 export function BriefPage() {
   const { user } = useAuth();
 
+  // Data sources
   const { data: pipelinesRes, isLoading: pipelinesLoading } = usePipelines();
   const pipelines = pipelinesRes?.data ?? [];
   const defaultPipeline = pipelines.find((p) => p.isDefault) ?? pipelines[0];
@@ -167,48 +335,118 @@ export function BriefPage() {
   const { data: activitiesRes, isLoading: activitiesLoading } = useActivities();
   const activities: Activity[] = activitiesRes?.data ?? [];
 
-  const isLoading = pipelinesLoading || forecastLoading || dealsLoading || activitiesLoading;
+  const { data: tasksRes, isLoading: tasksLoading } = useTasks();
+  const allTasks: FrameworkTask[] = (tasksRes?.data ?? []) as FrameworkTask[];
 
-  const { closingThisWeek, staleDeals, totalPipelineValue } = useMemo(() => {
+  const { data: inboxRes, isLoading: inboxLoading } = useInbox("unread");
+  const inboxItems: InboxItem[] = (inboxRes?.items ?? []) as InboxItem[];
+
+  const isLoading =
+    pipelinesLoading || forecastLoading || dealsLoading || activitiesLoading || tasksLoading || inboxLoading;
+
+  // ── Needs Your Attention ──
+  const attentionItems = useMemo<AttentionItem[]>(() => {
+    const items: AttentionItem[] = [];
+
+    // At-risk deals
+    for (const deal of deals) {
+      const intelligence = getAgentIntelligence(deal);
+      if (
+        intelligence &&
+        (intelligence.riskLevel === "high" || intelligence.riskLevel === "critical")
+      ) {
+        const daysSilent = daysBetween(new Date(deal.updatedAt), new Date());
+        items.push({ kind: "at-risk-deal", deal, intelligence, daysSilent });
+      }
+    }
+
+    // Agent tasks needing review (todo, originKind starts with "agent")
+    for (const task of allTasks) {
+      if (task.status === "todo" && task.originKind?.startsWith("agent")) {
+        items.push({ kind: "agent-task", task });
+      }
+    }
+
+    // High-priority inbox items
+    for (const item of inboxItems) {
+      const analysis = getAgentAnalysis(item);
+      if (analysis && analysis.score >= 70) {
+        items.push({ kind: "high-inbox", item, analysis });
+      }
+    }
+
+    return items;
+  }, [deals, allTasks, inboxItems]);
+
+  // ── Pipeline Snapshot ──
+  const { closingThisWeek, atRiskCount, totalPipelineValue } = useMemo(() => {
     const now = new Date();
-    const closing: Deal[] = [];
-    const stale: Deal[] = [];
+    let closing = 0;
+    let atRisk = 0;
     let total = 0;
 
     for (const deal of deals) {
       total += deal.value;
 
-      // Deals closing within 7 days
       if (deal.expectedCloseDate) {
         const daysUntilClose = daysBetween(now, new Date(deal.expectedCloseDate));
-        if (daysUntilClose >= 0 && daysUntilClose <= 7) {
-          closing.push(deal);
-        }
+        if (daysUntilClose >= 0 && daysUntilClose <= 7) closing++;
       }
 
-      // Stale deals: updatedAt > 14 days ago (proxy for no recent activity)
-      const daysSinceUpdate = daysBetween(new Date(deal.updatedAt), now);
-      if (daysSinceUpdate >= 14) {
-        stale.push(deal);
+      const intelligence = getAgentIntelligence(deal);
+      if (
+        intelligence &&
+        (intelligence.riskLevel === "high" || intelligence.riskLevel === "critical")
+      ) {
+        atRisk++;
       }
     }
 
-    return {
-      closingThisWeek: closing,
-      staleDeals: stale,
-      totalPipelineValue: total,
-    };
+    return { closingThisWeek: closing, atRiskCount: atRisk, totalPipelineValue: total };
   }, [deals]);
 
-  const recentActivities = useMemo(
-    () =>
-      [...activities]
-        .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
-        .slice(0, 10),
-    [activities],
-  );
+  // ── Overnight Activity ──
+  const overnightItems = useMemo<OvernightItem[]>(() => {
+    const items: OvernightItem[] = [];
+
+    // Recent activities (last 24h)
+    for (const a of activities) {
+      if (isLast24Hours(a.occurredAt)) {
+        items.push({
+          id: `activity-${a.id}`,
+          icon: ACTIVITY_ICONS[a.type] ?? "\u25CB",
+          description: a.subject,
+          time: a.occurredAt,
+          link: a.dealId ? `/deals/${a.dealId}` : undefined,
+        });
+      }
+    }
+
+    // Recently completed agent tasks
+    for (const task of allTasks) {
+      if (
+        task.status === "done" &&
+        task.originKind?.startsWith("agent") &&
+        isLast24Hours(task.updatedAt)
+      ) {
+        items.push({
+          id: `task-${task.id}`,
+          icon: "🤖",
+          description: `Agent completed: ${task.title}`,
+          time: task.updatedAt,
+          link: `/tasks/${task.id}`,
+        });
+      }
+    }
+
+    // Sort by time DESC, take 10
+    items.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+    return items.slice(0, 10);
+  }, [activities, allTasks]);
 
   const firstName = user?.name?.split(" ")[0] ?? "there";
+
+  const hasAgentData = attentionItems.length > 0 || overnightItems.some((i) => i.icon === "🤖");
 
   if (isLoading) {
     return (
@@ -220,125 +458,66 @@ export function BriefPage() {
 
   return (
     <div className="px-20 py-8 max-w-[1100px]">
-      {/* Greeting */}
+      {/* ── Header ── */}
       <h1 className="text-[30px] font-bold tracking-tight leading-tight mb-1">
         {greeting()}, {firstName}.
       </h1>
-      <p className="text-sm text-text-secondary mb-6">{todayStr}</p>
+      <p className="text-sm text-text-secondary mb-1">{formatDateHeader()}</p>
+      <p className="text-sm text-text-tertiary mb-6">
+        {centsToDisplay(totalPipelineValue)} pipeline
+        {closingThisWeek > 0 && <> &middot; {closingThisWeek} deal{closingThisWeek !== 1 && "s"} closing this week</>}
+      </p>
 
-      {/* Metrics row */}
+      {/* ── Pipeline Snapshot ── */}
+      <SectionLabel>Pipeline snapshot</SectionLabel>
       <div className="flex gap-4 mb-8">
         <MetricCard value={centsToDisplay(totalPipelineValue)} label="Pipeline value" />
-        <MetricCard value={String(closingThisWeek.length)} label="Closing this week" />
-        <MetricCard value={String(deals.length)} label="Active deals" />
         {forecast && (
-          <MetricCard
-            value={centsToDisplay(forecast.totalWeightedValue)}
-            label="Weighted forecast"
-          />
+          <MetricCard value={centsToDisplay(forecast.totalWeightedValue)} label="Weighted value" />
         )}
+        <MetricCard value={String(deals.length)} label="Total deals" />
+        <MetricCard value={String(closingThisWeek)} label="Closing this week" />
+        <MetricCard value={String(atRiskCount)} label="At risk" />
       </div>
 
-      {/* Needs Attention */}
-      {(staleDeals.length > 0 || closingThisWeek.length > 0) && (
-        <>
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">
-            Needs your attention
-          </div>
-          <div className="space-y-2.5 mb-8">
-            {staleDeals.map((deal) => {
-              const daysSilent = daysBetween(new Date(deal.updatedAt), new Date());
-              return (
-                <BriefCard
-                  key={deal.id}
-                  icon={"\u26A0\uFE0F"}
-                  title={`${deal.title} \u2014 ${daysSilent} days silent`}
-                  body={`This deal hasn\u2019t had any activity in ${daysSilent} days. Value: ${centsToFull(deal.value)}.`}
-                  dealId={deal.id}
-                />
-              );
-            })}
-            {closingThisWeek.map((deal) => {
-              const daysLeft = daysBetween(new Date(), new Date(deal.expectedCloseDate!));
-              const timeLabel = daysLeft === 0 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${daysLeft} days`;
-              return (
-                <BriefCard
-                  key={deal.id}
-                  icon={"\u{1F4C5}"}
-                  title={`${deal.title} \u2014 closing ${timeLabel}`}
-                  time={new Date(deal.expectedCloseDate!).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                  body={`Expected close ${timeLabel}. Value: ${centsToFull(deal.value)}.`}
-                  dealId={deal.id}
-                />
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {staleDeals.length === 0 && closingThisWeek.length === 0 && (
-        <div className="bg-bg-secondary border border-border rounded-lg p-4 mb-8 relative">
-          <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-accent rounded" />
-          <p className="text-sm text-text-secondary pl-3">
-            Nothing urgent today. All deals are on track.
+      {/* ── Needs Your Attention ── */}
+      <SectionLabel>Needs your attention</SectionLabel>
+      {attentionItems.length > 0 ? (
+        <div className="space-y-2.5 mb-8">
+          {attentionItems.map((item) => {
+            const key =
+              item.kind === "at-risk-deal"
+                ? `deal-${item.deal.id}`
+                : item.kind === "agent-task"
+                  ? `task-${item.task.id}`
+                  : `inbox-${item.item.id}`;
+            return <AttentionCard key={key} item={item} />;
+          })}
+        </div>
+      ) : (
+        <div className="bg-bg-secondary border-l-2 border-accent rounded-lg px-4 py-3 mb-8">
+          <p className="text-sm text-text-secondary">
+            {hasAgentData
+              ? "Nothing urgent today. All deals are on track."
+              : "Agents will surface insights here once they've analyzed your pipeline."}
           </p>
         </div>
       )}
 
-      {/* Recent Activity */}
-      {recentActivities.length > 0 && (
-        <>
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">
-            Recent activity
-          </div>
-          <div className="border border-border rounded-lg overflow-hidden mb-8">
-            {recentActivities.map((a) => (
-              <ActivityRow key={a.id} activity={a} />
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Pipeline Snapshot */}
-      {forecast && forecast.stages.length > 0 && (
-        <>
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">
-            Pipeline snapshot
-          </div>
-          <div className="border border-border rounded-lg overflow-hidden mb-8">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-bg-secondary text-left text-xs text-text-tertiary">
-                  <th className="px-4 py-2.5 font-medium">Stage</th>
-                  <th className="px-4 py-2.5 font-medium text-right">Deals</th>
-                  <th className="px-4 py-2.5 font-medium text-right">Total value</th>
-                  <th className="px-4 py-2.5 font-medium text-right">Weighted</th>
-                  <th className="px-4 py-2.5 font-medium text-right">Probability</th>
-                </tr>
-              </thead>
-              <tbody>
-                {forecast.stages.map((entry: ForecastEntry) => (
-                  <tr key={entry.stageId} className="border-t border-border">
-                    <td className="px-4 py-2.5 text-text-primary font-medium">{entry.stageName}</td>
-                    <td className="px-4 py-2.5 text-right text-text-secondary">{entry.dealCount}</td>
-                    <td className="px-4 py-2.5 text-right text-text-secondary">
-                      {centsToFull(entry.totalValue)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-text-secondary">
-                      {centsToFull(entry.weightedValue)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-text-secondary">
-                      {Math.round(entry.probability * 100)}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+      {/* ── Overnight Activity ── */}
+      <SectionLabel>Overnight activity</SectionLabel>
+      {overnightItems.length > 0 ? (
+        <div className="border border-border rounded-lg overflow-hidden mb-8">
+          {overnightItems.map((item) => (
+            <OvernightRow key={item.id} item={item} />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-bg-secondary border-l-2 border-accent rounded-lg px-4 py-3 mb-8">
+          <p className="text-sm text-text-secondary">
+            No recent activity in the last 24 hours.
+          </p>
+        </div>
       )}
     </div>
   );

@@ -193,4 +193,30 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
   } catch (err) {
     console.warn(`[tenant] Failed to create Deal Analyst agent:`, err);
   }
+
+  // 8. Create Follow-up Writer agent + daily routine
+  try {
+    const { FOLLOW_UP_WRITER_INSTRUCTIONS } = await import("./agents/follow-up-writer.js");
+    const rtResult4 = await db.execute(sql`
+      SELECT id FROM runtimes WHERE tenant_id = ${tenantId} AND type = 'claude' LIMIT 1
+    `);
+    const runtimeId4 = (rtResult4 as unknown as Array<{ id: string }>)[0]?.id;
+    if (runtimeId4) {
+      const followUpId = randomUUID();
+      await db.execute(sql`
+        INSERT INTO agents (id, tenant_id, name, role, status, instructions, runtime_id, created_at, updated_at)
+        VALUES (${followUpId}, ${tenantId}, 'Follow-up Writer', 'follow-up-writer', 'idle',
+          ${FOLLOW_UP_WRITER_INSTRUCTIONS}, ${runtimeId4}, now(), now())
+      `);
+
+      // Daily routine at 7 AM UTC (after Deal Analyst at 6 AM)
+      await db.execute(sql`
+        INSERT INTO routines (id, tenant_id, title, assignee_agent_id, cron_expression, status, created_at, updated_at)
+        VALUES (${randomUUID()}, ${tenantId}, 'Follow-up Drafts (daily)', ${followUpId},
+          '0 7 * * *', 'active', now(), now())
+      `);
+    }
+  } catch (err) {
+    console.warn(`[tenant] Failed to create Follow-up Writer agent:`, err);
+  }
 }
