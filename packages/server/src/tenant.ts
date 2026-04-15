@@ -38,22 +38,22 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
   // trigger → connector-action(list_emails) → for-each → create-inbox-item
   const emailWorkflowId = randomUUID();
   const emailBlocks = [
-    { id: "trigger", name: "Start", type: "trigger", config: {} },
+    { id: "trigger", name: "trigger", type: "trigger", config: {} },
     {
       id: "fetch",
-      name: "Fetch Emails",
+      name: "fetch",
       type: "connector-action",
       config: { connectorKind: "google", action: "list_emails", inputs: { maxResults: 20 } },
     },
     {
       id: "loop",
-      name: "Process Each Email",
+      name: "loop",
       type: "for-each",
-      config: { items: "{{fetch.data.messages}}" },
+      config: { items: "{{fetch.messages}}" },
     },
     {
       id: "store",
-      name: "Store in Inbox",
+      name: "store",
       type: "create-inbox-item",
       config: { source: "gmail", items: "{{loop.items}}" },
     },
@@ -81,22 +81,22 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
   // trigger → connector-action(list_events) → for-each → create-inbox-item
   const calWorkflowId = randomUUID();
   const calBlocks = [
-    { id: "trigger", name: "Start", type: "trigger", config: {} },
+    { id: "trigger", name: "trigger", type: "trigger", config: {} },
     {
       id: "fetch",
-      name: "Fetch Calendar Events",
+      name: "fetch",
       type: "connector-action",
       config: { connectorKind: "google", action: "list_events", inputs: { maxResults: 20 } },
     },
     {
       id: "loop",
-      name: "Process Each Event",
+      name: "loop",
       type: "for-each",
-      config: { items: "{{fetch.data.events}}" },
+      config: { items: "{{fetch.events}}" },
     },
     {
       id: "store",
-      name: "Store in Inbox",
+      name: "store",
       type: "create-inbox-item",
       config: { source: "calendar", items: "{{loop.items}}" },
     },
