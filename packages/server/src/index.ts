@@ -167,14 +167,29 @@ async function wakeAgentByRole(
 }
 
 // Event-driven: wake Email Triage agent when new inbox items arrive
+// No per-item tasks — agent queries all unread inbox items directly
 app.onEvent("inbox.item_created", async (event) => {
-  await wakeAgentByRole(
-    "email-triage", event.tenantId,
-    "Triage inbox item",
-    `Analyze inbox item: ${event.data.itemId}\nSource: ${event.data.source}`,
-    "agent-triage",
-    event.data as Record<string, unknown>,
-  );
+  if (!agentEngineRef || !dbRef) return;
+  const db = dbRef as any;
+  const { sql } = await import("drizzle-orm");
+
+  // Find triage agent
+  const agentRows = await db.execute(sql`
+    SELECT id FROM agents WHERE tenant_id = ${event.tenantId} AND role = 'email-triage' LIMIT 1
+  `);
+  const agentId = (agentRows as any)[0]?.id;
+  if (!agentId) return;
+
+  // Just wake — no task needed. Agent queries inbox directly.
+  // Coalescing handles multiple events: only one wake per batch.
+  const outcome = await agentEngineRef.wake({
+    agentId,
+    tenantId: event.tenantId,
+    reason: "connector_event",
+  });
+  if (outcome.kind === "created") {
+    await agentEngineRef.enqueue(outcome.wakeupRequestId);
+  }
 });
 
 // Event-driven: activate sync routines when Google is connected

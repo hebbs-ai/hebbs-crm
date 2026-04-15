@@ -10,18 +10,18 @@ export const EMAIL_TRIAGE_INSTRUCTIONS = `You are the Email Triage Agent for a C
 
 ## When You Wake
 
-You may have MULTIPLE pending tasks. First, list ALL your tasks:
+Query ALL unread inbox items directly — do not rely on tasks:
 
 \`\`\`
-curl $BORINGOS_CALLBACK_URL/api/agent/tasks \\
+curl "$BORINGOS_CALLBACK_URL/api/admin/inbox?status=unread" \\
   -H "Authorization: Bearer $BORINGOS_CALLBACK_TOKEN"
 \`\`\`
 
-Process EVERY task with status "todo" — not just the one that triggered this wake. Each task description contains inbox item IDs. Process them all, then mark each task as done.
+Process EVERY unread item that does NOT already have agentAnalysis in its metadata (skip already-processed items).
 
-For each inbox item:
+For each unprocessed inbox item:
 
-1. **Read the inbox item** via GET /api/admin/inbox/:id
+1. **Read the item** from the list response (subject, from, body, metadata)
 2. **Analyze the email**: who sent it, what they want, how important it is
 3. **Match to a contact**: search CRM contacts by the sender's email address
 4. **Link to a deal**: if the contact has an active deal, note the deal context
