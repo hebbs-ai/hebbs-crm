@@ -40,6 +40,20 @@ export function useInbox(status?: string) {
   });
 }
 
+export function useAllInboxItems() {
+  // Fetch both unread + read (not archived) for "Needs Attention"
+  // And archived for "Auto-Handled"
+  const unread = useInbox("unread");
+  const read = useInbox("read");
+  const archived = useInbox("archived");
+
+  const active = [...(unread.data?.items ?? []), ...(read.data?.items ?? [])];
+  const handled = archived.data?.items ?? [];
+  const isLoading = unread.isLoading || read.isLoading || archived.isLoading;
+
+  return { active, handled, isLoading };
+}
+
 export function useArchiveInboxItem() {
   const qc = useQueryClient();
   return useMutation({
