@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { useTeamUsers, useInvitations, useInviteUser, useUpdateUserRole, useRemoveUser, useRevokeInvitation } from "../hooks/useTeam";
 import { useConnectorStatus, useDisconnectConnector } from "../hooks/useConnectors";
@@ -13,6 +13,78 @@ const CONNECTOR_ICONS: Record<string, string> = {
   slack: "\uD83D\uDCAC",
   github: "\uD83D\uDC19",
 };
+
+// --- Framework API helpers ---
+
+function frameworkHeaders(): Record<string, string> {
+  const token = localStorage.getItem("token");
+  const tenantId = localStorage.getItem("tenantId");
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) h["Authorization"] = `Bearer ${token}`;
+  if (tenantId) h["X-Tenant-Id"] = tenantId;
+  return h;
+}
+
+async function adminFetch<T>(path: string, opts?: RequestInit): Promise<T> {
+  const res = await fetch(`/api/admin${path}`, { headers: frameworkHeaders(), ...opts });
+  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  return res.json();
+}
+
+// --- Hooks for framework data (agents, runtimes, settings) ---
+
+function useFrameworkAgents() {
+  const [agents, setAgents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const refresh = useCallback(async () => {
+    try {
+      const res = await adminFetch<{ agents: any[] }>("/agents");
+      setAgents(res.agents);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+  return { agents, loading, refresh };
+}
+
+function useFrameworkRuntimes() {
+  const [runtimes, setRuntimes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const refresh = useCallback(async () => {
+    try {
+      const res = await adminFetch<{ runtimes: any[] }>("/runtimes");
+      setRuntimes(res.runtimes);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+  return { runtimes, loading, refresh };
+}
+
+function useFrameworkSettings() {
+  const [settings, setSettings] = useState<Record<string, string | null>>({});
+  const [loading, setLoading] = useState(true);
+  const refresh = useCallback(async () => {
+    try {
+      const res = await adminFetch<{ settings: Record<string, string | null> }>("/settings");
+      setSettings(res.settings);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+  return { settings, loading, refresh };
+}
+
+function useRuntimeModels(runtimeId: string | undefined) {
+  const [models, setModels] = useState<{ id: string; label: string }[]>([]);
+  useEffect(() => {
+    if (!runtimeId) return;
+    adminFetch<{ models: { id: string; label: string }[] }>(`/runtimes/${runtimeId}/models`)
+      .then((res) => setModels(res.models))
+      .catch(() => {});
+  }, [runtimeId]);
+  return models;
+}
 
 function ConnectorsTab() {
   const { user } = useAuth();
@@ -113,12 +185,241 @@ function ConnectorsTab() {
   );
 }
 
+// --- Agents Tab ---
+
+function AgentsTab() {
+  const { agents, loading, refresh } = useFrameworkAgents();
+  const { runtimes } = useFrameworkRuntimes();
+  const { settings, refresh: refreshSettings } = useFrameworkSettings();
+
+  const agentsPaused = settings.agents_paused === "true";
+
+  const handleGlobalPause = async () => {
+    await adminFetch("/settings", {
+      method: "PATCH",
+      body: JSON.stringify({ agents_paused: agentsPaused ? "false" : "true" }),
+    });
+    refreshSettings();
+  };
+
+  const handleToggleAgent = async (agentId: string, currentStatus: string) => {
+    const newStatus = currentStatus === "paused" ? "idle" : "paused";
+    await adminFetch(`/agents/${agentId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: newStatus }),
+    });
+    refresh();
+  };
+
+  const runtimeMap = new Map(runtimes.map((r: any) => [r.id, r]));
+
+  if (loading) return <p className="text-sm text-text-secondary">Loading agents...</p>;
+
+  return (
+    <div>
+      {/* Global pause banner */}
+      <div className={`mb-6 flex items-center justify-between rounded-lg border p-4 ${
+        agentsPaused ? "border-red-400/40 bg-red-50/5" : "border-border bg-bg-secondary"
+      }`}>
+        <div>
+          <div className="text-sm font-semibold text-text-primary">
+            {agentsPaused ? "All agents are paused" : "Agents are active"}
+          </div>
+          <div className="text-xs text-text-secondary mt-0.5">
+            {agentsPaused
+              ? "No agent runs will execute until unpaused. Pending wakeups are held."
+              : "Agents will execute normally when triggered."}
+          </div>
+        </div>
+        <button
+          onClick={handleGlobalPause}
+          className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+            agentsPaused
+              ? "bg-accent text-white hover:bg-accent-hover"
+              : "border border-red-400/40 text-text-red hover:bg-red-50/10"
+          }`}
+        >
+          {agentsPaused ? "Resume All" : "Pause All"}
+        </button>
+      </div>
+
+      {/* Agent list */}
+      {agents.length === 0 ? (
+        <p className="text-sm text-text-secondary">No agents configured.</p>
+      ) : (
+        <div className="rounded-lg border border-border">
+          <div className="grid grid-cols-[1fr_120px_160px_100px_80px] gap-4 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary border-b border-border">
+            <span>Agent</span>
+            <span>Role</span>
+            <span>Runtime / Model</span>
+            <span>Status</span>
+            <span></span>
+          </div>
+          {agents.map((agent: any) => {
+            const rt = runtimeMap.get(agent.runtimeId);
+            return (
+              <div key={agent.id} className="grid grid-cols-[1fr_120px_160px_100px_80px] gap-4 px-4 py-3 border-b border-border last:border-b-0 items-center hover:bg-bg-secondary transition-colors">
+                <div>
+                  <div className="text-sm font-medium text-text-primary">{agent.name}</div>
+                  {agent.title && <div className="text-xs text-text-tertiary">{agent.title}</div>}
+                </div>
+                <div className="text-xs text-text-secondary">{agent.role}</div>
+                <div>
+                  <div className="text-xs text-text-primary">{rt?.name ?? "—"}</div>
+                  <div className="text-[11px] text-text-tertiary">{rt?.model ?? "default"}</div>
+                </div>
+                <Badge color={
+                  agent.status === "paused" ? "orange" :
+                  agent.status === "running" ? "blue" :
+                  agent.status === "error" ? "red" : "gray"
+                }>
+                  {agent.status}
+                </Badge>
+                <button
+                  onClick={() => handleToggleAgent(agent.id, agent.status)}
+                  className="text-xs text-text-secondary hover:text-text-primary transition-colors"
+                >
+                  {agent.status === "paused" ? "Resume" : "Pause"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Runtimes Tab ---
+
+function RuntimesTab() {
+  const { runtimes, loading, refresh } = useFrameworkRuntimes();
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  if (loading) return <p className="text-sm text-text-secondary">Loading runtimes...</p>;
+
+  return (
+    <div>
+      {runtimes.length === 0 ? (
+        <p className="text-sm text-text-secondary">No runtimes configured.</p>
+      ) : (
+        <div className="grid gap-4">
+          {runtimes.map((rt: any) => (
+            <RuntimeCard
+              key={rt.id}
+              runtime={rt}
+              isEditing={editingId === rt.id}
+              onEdit={() => setEditingId(editingId === rt.id ? null : rt.id)}
+              onSave={async (model: string) => {
+                await adminFetch(`/runtimes/${rt.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({ model }),
+                });
+                setEditingId(null);
+                refresh();
+              }}
+              onSetDefault={async () => {
+                await adminFetch(`/runtimes/${rt.id}/default`, { method: "POST" });
+                refresh();
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RuntimeCard({ runtime: rt, isEditing, onEdit, onSave, onSetDefault }: {
+  runtime: any;
+  isEditing: boolean;
+  onEdit: () => void;
+  onSave: (model: string) => Promise<void>;
+  onSetDefault: () => Promise<void>;
+}) {
+  const models = useRuntimeModels(isEditing ? rt.id : undefined);
+  const [selectedModel, setSelectedModel] = useState(rt.model ?? "");
+
+  useEffect(() => { setSelectedModel(rt.model ?? ""); }, [rt.model]);
+
+  return (
+    <div className="rounded-lg border border-border p-4 hover:bg-bg-secondary/50 transition-colors">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-text-primary">{rt.name}</span>
+            <Badge color="gray">{rt.type}</Badge>
+            {rt.isDefault && <Badge color="blue">Default</Badge>}
+            <Badge color={rt.status === "active" || rt.status === "healthy" ? "green" : "gray"}>
+              {rt.status}
+            </Badge>
+          </div>
+          <div className="text-xs text-text-secondary mt-0.5">
+            Model: {rt.model ?? "CLI default"}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {!rt.isDefault && (
+            <button onClick={onSetDefault} className="text-xs text-text-secondary hover:text-text-primary transition-colors">
+              Set Default
+            </button>
+          )}
+          <button onClick={onEdit} className="rounded-md border border-border px-3 py-1 text-xs text-text-secondary hover:bg-bg-hover transition-colors">
+            {isEditing ? "Cancel" : "Change Model"}
+          </button>
+        </div>
+      </div>
+      {isEditing && (
+        <div className="mt-3 flex items-center gap-2 pt-3 border-t border-border">
+          {models.length > 0 ? (
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="flex-1 rounded-md border border-border bg-bg px-2 py-1.5 text-sm text-text-primary outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+            >
+              <option value="">CLI default</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>{m.label} ({m.id})</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="text"
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              placeholder="Model ID (e.g., claude-sonnet-4-6)"
+              className="flex-1 rounded-md border border-border bg-bg px-2 py-1.5 text-sm text-text-primary outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+            />
+          )}
+          <button
+            onClick={() => onSave(selectedModel)}
+            className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
+          >
+            Save
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Main Settings Page ---
+
+type TabKey = "team" | "connectors" | "agents" | "runtimes";
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "team", label: "Team" },
+  { key: "connectors", label: "Connectors" },
+  { key: "agents", label: "Agents" },
+  { key: "runtimes", label: "Runtimes" },
+];
+
 export function SettingsPage() {
   const { user } = useAuth();
+  const { tab } = useParams<{ tab?: string }>();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<"team" | "connectors">(
-    searchParams.has("connected") ? "connectors" : "team"
-  );
+  const activeTab: TabKey = (TABS.find((t) => t.key === tab)?.key) ?? (searchParams.has("connected") ? "connectors" : "team");
   const { data: usersData, isLoading: usersLoading } = useTeamUsers();
   const { data: invitesData } = useInvitations();
   const inviteUser = useInviteUser();
@@ -155,29 +456,24 @@ export function SettingsPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-border">
-        <button
-          onClick={() => setActiveTab("team")}
-          className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === "team"
-              ? "border-accent text-text-primary"
-              : "border-transparent text-text-secondary hover:text-text-primary"
-          }`}
-        >
-          Team
-        </button>
-        <button
-          onClick={() => setActiveTab("connectors")}
-          className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === "connectors"
-              ? "border-accent text-text-primary"
-              : "border-transparent text-text-secondary hover:text-text-primary"
-          }`}
-        >
-          Connectors
-        </button>
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => navigate(`/settings/${t.key}`, { replace: true })}
+            className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              activeTab === t.key
+                ? "border-accent text-text-primary"
+                : "border-transparent text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {activeTab === "connectors" && <ConnectorsTab />}
+      {activeTab === "agents" && <AgentsTab />}
+      {activeTab === "runtimes" && <RuntimesTab />}
 
       {activeTab === "team" && <>
       {/* Team Members */}

@@ -69,7 +69,8 @@ function AppRoutes() {
         <Route path="inbox" element={<InboxPage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="tasks/:id" element={<TaskDetailPage />} />
-        <Route path="settings/team" element={<SettingsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        <Route path="settings/:tab" element={<SettingsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/brief" replace />} />

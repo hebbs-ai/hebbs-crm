@@ -4,6 +4,25 @@ import { useTask, useUpdateTask, usePostComment } from "../hooks/useTasks";
 import { PropertyRow } from "../components/ui/PropertyRow";
 import { Badge } from "../components/ui/Badge";
 
+function formatCost(usd: number): string {
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function formatDuration(start: string | null, end: string | null): string {
+  if (!start || !end) return "—";
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+}
+
 const PRIORITY_COLORS: Record<string, "red" | "orange" | "yellow" | "gray"> = {
   urgent: "red",
   high: "orange",
@@ -32,6 +51,8 @@ export function TaskDetailPage() {
   const task = data?.data;
   const comments = (task as any)?.comments ?? [];
   const workProducts = (task as any)?.workProducts ?? [];
+  const runs = (task as any)?.runs ?? [];
+  const costSummary = (task as any)?.costSummary;
 
   if (isLoading) return <div className="p-8 text-sm text-text-secondary">Loading...</div>;
   if (!task) return <div className="p-8 text-sm text-text-secondary">Task not found</div>;
@@ -70,6 +91,14 @@ export function TaskDetailPage() {
             <Badge color={PRIORITY_COLORS[task.priority] ?? "gray"}>
               {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
             </Badge>
+          )}
+          {costSummary?.models?.length > 0 && (
+            <Badge color="purple">{costSummary.models.join(", ")}</Badge>
+          )}
+          {costSummary?.totalCostUsd > 0 && (
+            <span className="text-xs text-text-secondary px-2 py-0.5 rounded-full bg-bg-secondary border border-border">
+              {formatCost(costSummary.totalCostUsd)} &middot; {formatTokens(costSummary.totalInputTokens + costSummary.totalOutputTokens)} tokens &middot; {costSummary.runCount} run{costSummary.runCount !== 1 ? "s" : ""}
+            </span>
           )}
         </div>
         {task.description && (
@@ -196,6 +225,44 @@ export function TaskDetailPage() {
                     }`}
                   >
                     {wp.title ?? wp.id}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Agent Runs */}
+          {runs.length > 0 && (
+            <>
+              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3 mt-6">
+                Agent Runs
+              </h2>
+              <div className="rounded-lg border border-border">
+                {runs.map((run: any, i: number) => (
+                  <div
+                    key={run.id}
+                    className={`px-4 py-3 ${i < runs.length - 1 ? "border-b border-border" : ""}`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-medium text-text-primary">
+                        {run.agentName ?? "Agent"}
+                      </span>
+                      <Badge color={
+                        run.status === "done" ? "green" :
+                        run.status === "failed" ? "red" :
+                        run.status === "running" ? "blue" : "gray"
+                      }>
+                        {run.status}
+                      </Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-tertiary">
+                      {run.model && <span>{run.model}</span>}
+                      {(run.inputTokens > 0 || run.outputTokens > 0) && (
+                        <span>{formatTokens(run.inputTokens)} in / {formatTokens(run.outputTokens)} out</span>
+                      )}
+                      {run.costUsd > 0 && <span>{formatCost(run.costUsd)}</span>}
+                      <span>{formatDuration(run.startedAt, run.finishedAt)}</span>
+                    </div>
                   </div>
                 ))}
               </div>

@@ -29,9 +29,33 @@ interface WorkProduct {
   [key: string]: unknown;
 }
 
+interface TaskRun {
+  id: string;
+  agentId: string;
+  agentName: string | null;
+  status: string;
+  model: string | null;
+  exitCode: number | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+interface CostSummary {
+  totalCostUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  runCount: number;
+  models: string[];
+}
+
 interface TaskDetail extends Task {
   comments: TaskComment[];
   workProducts: WorkProduct[];
+  runs: TaskRun[];
+  costSummary: CostSummary;
 }
 
 interface TaskFilters {

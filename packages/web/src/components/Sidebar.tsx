@@ -14,7 +14,7 @@ const NAV_ITEMS = [
 ];
 
 const TOOL_ITEMS = [
-  { to: "/settings/team", label: "Settings", icon: "\u2699" },
+  { to: "/settings", label: "Settings", icon: "\u2699" },
 ];
 
 export function Sidebar() {
