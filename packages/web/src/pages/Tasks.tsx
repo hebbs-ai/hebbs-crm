@@ -97,16 +97,19 @@ function NewTaskForm({
 export function TasksPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
   const [showCreate, setShowCreate] = useState(false);
+  const [showSystem, setShowSystem] = useState(false);
 
   const { data, isLoading } = useTasks(
     statusFilter ? { status: statusFilter } : undefined,
   );
   const createTask = useCreateTask();
 
-  const HIDDEN_ORIGINS = ["copilot", "agent-triage", "agent-enrichment"];
-  const tasks = (data?.data ?? []).filter(
-    (t) => !HIDDEN_ORIGINS.includes((t as any).originKind ?? ""),
+  const allTasks = data?.data ?? [];
+  const userTasks = allTasks.filter(
+    (t) => !(t as any).originKind || (t as any).originKind === "manual",
   );
+  const tasks = showSystem ? allTasks : userTasks;
+  const systemCount = allTasks.length - userTasks.length;
 
   const filters: { label: string; value: StatusFilter }[] = [
     { label: "All", value: "" },
@@ -144,6 +147,18 @@ export function TasksPage() {
             {f.label}
           </button>
         ))}
+        {systemCount > 0 && (
+          <button
+            onClick={() => setShowSystem(!showSystem)}
+            className={`ml-auto rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              showSystem
+                ? "bg-bg-hover text-text-primary"
+                : "text-text-tertiary hover:text-text-secondary"
+            }`}
+          >
+            {showSystem ? "Hide" : "Show"} system tasks ({systemCount})
+          </button>
+        )}
       </div>
 
       {isLoading ? (
