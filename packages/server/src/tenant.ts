@@ -74,7 +74,7 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
   await db.execute(sql`
     INSERT INTO routines (id, tenant_id, title, workflow_id, cron_expression, status, created_at, updated_at)
     VALUES (${randomUUID()}, ${tenantId}, 'Email Sync (every 15 min)', ${emailWorkflowId},
-      '*/15 * * * *', 'active', now(), now())
+      '*/15 * * * *', 'paused', now(), now())
   `);
 
   // 3. Calendar ingest workflow
@@ -117,7 +117,7 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
   await db.execute(sql`
     INSERT INTO routines (id, tenant_id, title, workflow_id, cron_expression, status, created_at, updated_at)
     VALUES (${randomUUID()}, ${tenantId}, 'Calendar Sync (every 15 min)', ${calWorkflowId},
-      '*/15 * * * *', 'active', now(), now())
+      '*/15 * * * *', 'paused', now(), now())
   `);
 
   // 4. Auto-connect Slack if bot token is configured (server-level)

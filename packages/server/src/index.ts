@@ -177,6 +177,21 @@ app.onEvent("inbox.item_created", async (event) => {
   );
 });
 
+// Event-driven: activate sync routines when Google is connected
+app.onEvent("connector.connected", async (event) => {
+  if (event.data.kind !== "google") return;
+  const db = dbRef as any;
+  if (!db) return;
+  const { sql } = await import("drizzle-orm");
+  // Unpause email + calendar sync routines for this tenant
+  await db.execute(sql`
+    UPDATE routines SET status = 'active'
+    WHERE tenant_id = ${event.tenantId}
+      AND title LIKE '%Sync%'
+      AND status = 'paused'
+  `).catch(() => {});
+});
+
 // Event-driven: wake Enrichment agent when new contacts/companies are created
 app.onEvent("entity.created", async (event) => {
   const { entityType, entityId } = event.data as { entityType: string; entityId: string };
