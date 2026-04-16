@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { Link } from "react-router-dom";
-import { useMemoryConfig, useKnowledgeFiles, useUploadFile, useDeleteFile } from "../hooks/useMemory";
+import { useMemoryConfig, useEntityFiles, useUploadFile, useDeleteFile } from "../hooks/useMemory";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -25,7 +25,7 @@ function formatDate(dateStr: string): string {
 
 export function KnowledgeBasePage() {
   const { data: config, isLoading: configLoading } = useMemoryConfig();
-  const { data: filesData, isLoading: filesLoading } = useKnowledgeFiles();
+  const { data: filesData, isLoading: filesLoading } = useEntityFiles("org", "");
   const upload = useUploadFile();
   const deleteFile = useDeleteFile();
   const fileInputRef = useRef<HTMLInputElement>(null);

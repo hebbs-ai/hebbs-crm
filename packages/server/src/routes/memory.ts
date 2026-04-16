@@ -88,7 +88,14 @@ export function createMemoryRoutes(ctx: CrmContext) {
     const entityId = c.req.query("entityId");
 
     let result;
-    if (entityType && entityId) {
+    if (entityType === "org") {
+      result = await ctx.db.execute(sql`
+        SELECT id, name, size, status, entity_type as "entityType", entity_id as "entityId", remote_path as "remotePath", created_at as "createdAt"
+        FROM crm_knowledge_files
+        WHERE tenant_id = ${tenantId} AND entity_type = 'org'
+        ORDER BY created_at DESC
+      `);
+    } else if (entityType && entityId) {
       result = await ctx.db.execute(sql`
         SELECT id, name, size, status, entity_type as "entityType", entity_id as "entityId", remote_path as "remotePath", created_at as "createdAt"
         FROM crm_knowledge_files
