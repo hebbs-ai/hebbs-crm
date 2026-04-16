@@ -4,8 +4,9 @@ import { useAuth } from "../lib/auth";
 import { useTeamUsers, useInvitations, useInviteUser, useUpdateUserRole, useRemoveUser, useRevokeInvitation } from "../hooks/useTeam";
 import { useConnectorStatus, useDisconnectConnector } from "../hooks/useConnectors";
 import { useMemoryConfig, useSaveMemoryConfig, useRemoveMemoryConfig } from "../hooks/useMemory";
+import { useCompanyProfile, useSaveCompanyProfile } from "../hooks/useProfile";
 import { Modal } from "../components/ui/Modal";
-import { Input, Select } from "../components/ui/FormField";
+import { Input, Textarea, Select } from "../components/ui/FormField";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Badge } from "../components/ui/Badge";
 
@@ -85,6 +86,109 @@ function useRuntimeModels(runtimeId: string | undefined) {
       .catch(() => {});
   }, [runtimeId]);
   return models;
+}
+
+// --- Company Profile Tab ---
+
+const PROFILE_FIELDS: {
+  key: string;
+  label: string;
+  type: "input" | "textarea";
+  rows?: number;
+  help: string;
+}[] = [
+  { key: "company_name", label: "Company Name", type: "input", help: "" },
+  { key: "company_description", label: "What We Do", type: "textarea", rows: 3, help: "Describe your business in 1-2 sentences" },
+  { key: "company_products", label: "Products & Services", type: "textarea", rows: 3, help: "List your main products/services, one per line" },
+  { key: "company_icp", label: "Ideal Customer", type: "textarea", rows: 2, help: "Who is your target buyer? Industry, size, role" },
+  { key: "company_differentiators", label: "Key Differentiators", type: "textarea", rows: 3, help: "What makes you different from competitors?" },
+  { key: "company_competitors", label: "Competitors", type: "input", help: "List main competitors, comma separated" },
+  { key: "company_methodology", label: "Sales Methodology", type: "textarea", rows: 2, help: "How do you sell? E.g., consultative, demo-first, PLG" },
+  { key: "company_tone", label: "Tone & Voice", type: "textarea", rows: 2, help: "How should AI agents communicate? E.g., professional but casual" },
+];
+
+function CompanyProfileTab() {
+  const { data, isLoading } = useCompanyProfile();
+  const saveProfile = useSaveCompanyProfile();
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [initialized, setInitialized] = useState(false);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (data?.profile && !initialized) {
+      const initial: Record<string, string> = {};
+      for (const f of PROFILE_FIELDS) {
+        initial[f.key] = data.profile[f.key as keyof typeof data.profile] ?? "";
+      }
+      setForm(initial);
+      setInitialized(true);
+    }
+  }, [data, initialized]);
+
+  const handleChange = (key: string, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await saveProfile.mutateAsync(form);
+      setSuccessMsg("Company profile saved successfully.");
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch {
+      // error handled by mutation state
+    }
+  };
+
+  if (isLoading) {
+    return <p className="text-sm text-text-secondary">Loading company profile...</p>;
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <p className="text-sm text-text-secondary mb-6">
+        Tell your AI agents about your business. This context guides how they analyze emails, draft follow-ups, and prepare for meetings.
+      </p>
+
+      {successMsg && (
+        <div className="mb-4 rounded-md bg-surface-green px-4 py-2 text-sm text-text-green">
+          {successMsg}
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-5">
+        {PROFILE_FIELDS.map((field) => (
+          <div key={field.key}>
+            {field.type === "input" ? (
+              <Input
+                label={field.label}
+                value={form[field.key] ?? ""}
+                onChange={(e) => handleChange(field.key, (e.target as HTMLInputElement).value)}
+              />
+            ) : (
+              <Textarea
+                label={field.label}
+                rows={field.rows}
+                value={form[field.key] ?? ""}
+                onChange={(e) => handleChange(field.key, (e.target as HTMLTextAreaElement).value)}
+              />
+            )}
+            {field.help && (
+              <p className="mt-1 text-xs text-text-tertiary">{field.help}</p>
+            )}
+          </div>
+        ))}
+
+        <button
+          type="submit"
+          disabled={saveProfile.isPending}
+          className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+        >
+          {saveProfile.isPending ? "Saving..." : "Save Profile"}
+        </button>
+      </form>
+    </div>
+  );
 }
 
 function ConnectorsTab() {
@@ -521,9 +625,10 @@ function MemoryTab() {
 
 // --- Main Settings Page ---
 
-type TabKey = "team" | "connectors" | "agents" | "runtimes" | "memory";
+type TabKey = "profile" | "team" | "connectors" | "agents" | "runtimes" | "memory";
 
 const TABS: { key: TabKey; label: string }[] = [
+  { key: "profile", label: "Company Profile" },
   { key: "team", label: "Team" },
   { key: "connectors", label: "Connectors" },
   { key: "memory", label: "Memory" },
@@ -536,7 +641,7 @@ export function SettingsPage() {
   const { tab } = useParams<{ tab?: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const activeTab: TabKey = (TABS.find((t) => t.key === tab)?.key) ?? (searchParams.has("connected") ? "connectors" : "team");
+  const activeTab: TabKey = (TABS.find((t) => t.key === tab)?.key) ?? (searchParams.has("connected") ? "connectors" : "profile");
   const { data: usersData, isLoading: usersLoading } = useTeamUsers();
   const { data: invitesData } = useInvitations();
   const inviteUser = useInviteUser();
@@ -588,6 +693,7 @@ export function SettingsPage() {
         ))}
       </div>
 
+      {activeTab === "profile" && <CompanyProfileTab />}
       {activeTab === "connectors" && <ConnectorsTab />}
       {activeTab === "memory" && <MemoryTab />}
       {activeTab === "agents" && <AgentsTab />}

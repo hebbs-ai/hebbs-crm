@@ -7,6 +7,7 @@ import { provisionCrmTenant } from "./tenant.js";
 import { crmSchemaProvider } from "./context-providers/crm-schema.js";
 import { createCrmUserContextProvider } from "./context-providers/crm-user-context.js";
 import { createCrmMemoryProvider } from "./context-providers/crm-memory.js";
+import { createCompanyProfileProvider } from "./context-providers/crm-company-profile.js";
 
 const app = new BoringOS({});
 
@@ -142,6 +143,7 @@ app.schema(`
 // CRM context providers — teach copilot about CRM data
 // Registered before listen() so they're in the context pipeline
 let dbRef: unknown = null;
+app.contextProvider(createCompanyProfileProvider(() => dbRef));
 app.contextProvider(crmSchemaProvider);
 app.contextProvider(createCrmUserContextProvider(() => dbRef));
 app.contextProvider(createCrmMemoryProvider(() => dbRef));
