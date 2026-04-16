@@ -77,50 +77,9 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
       '*/15 * * * *', 'paused', now(), now())
   `);
 
-  // 3. Calendar ingest workflow
-  // trigger → connector-action(list_events) → for-each → create-inbox-item
-  const calWorkflowId = randomUUID();
-  const calBlocks = [
-    { id: "trigger", name: "trigger", type: "trigger", config: {} },
-    {
-      id: "fetch",
-      name: "fetch",
-      type: "connector-action",
-      config: { connectorKind: "google", action: "list_events", inputs: { maxResults: 20 } },
-    },
-    {
-      id: "loop",
-      name: "loop",
-      type: "for-each",
-      config: { items: "{{fetch.events}}" },
-    },
-    {
-      id: "store",
-      name: "store",
-      type: "create-inbox-item",
-      config: { source: "calendar", items: "{{loop.items}}" },
-    },
-  ];
-  const calEdges = [
-    { id: "e1", sourceBlockId: "trigger", targetBlockId: "fetch", sourceHandle: null, sortOrder: 0 },
-    { id: "e2", sourceBlockId: "fetch", targetBlockId: "loop", sourceHandle: null, sortOrder: 0 },
-    { id: "e3", sourceBlockId: "loop", targetBlockId: "store", sourceHandle: null, sortOrder: 0 },
-  ];
+  // Calendar: no inbox ingestion — Meeting Prep agent queries calendar directly
 
-  await db.execute(sql`
-    INSERT INTO workflows (id, tenant_id, name, type, status, blocks, edges, created_at, updated_at)
-    VALUES (${calWorkflowId}, ${tenantId}, 'Calendar Sync', 'system', 'active',
-      ${JSON.stringify(calBlocks)}::jsonb, ${JSON.stringify(calEdges)}::jsonb, now(), now())
-  `);
-
-  // Calendar sync routine — every 15 minutes
-  await db.execute(sql`
-    INSERT INTO routines (id, tenant_id, title, workflow_id, cron_expression, status, created_at, updated_at)
-    VALUES (${randomUUID()}, ${tenantId}, 'Calendar Sync (every 15 min)', ${calWorkflowId},
-      '*/15 * * * *', 'paused', now(), now())
-  `);
-
-  // 4. Auto-connect Slack if bot token is configured (server-level)
+  // 3. Auto-connect Slack if bot token is configured (server-level)
   const slackBotToken = process.env.SLACK_BOT_TOKEN;
   if (slackBotToken) {
     await db.execute(sql`
