@@ -84,12 +84,43 @@ export function createMemoryRoutes(ctx: CrmContext) {
   app.get("/files", async (c) => {
     const tenantId = c.req.header("X-Tenant-Id")!;
     const result = await ctx.db.execute(sql`
-      SELECT id, name, size, status, created_at as "createdAt"
+      SELECT id, name, size, status, remote_path as "remotePath", created_at as "createdAt"
       FROM crm_knowledge_files
       WHERE tenant_id = ${tenantId}
       ORDER BY created_at DESC
     `);
-    return c.json({ files: result });
+    const files = result as unknown as Array<{ id: string; name: string; size: number; status: string; remotePath: string; createdAt: string }>;
+
+    // For pending files, check Hebbs status and update
+    const pendingFiles = files.filter((f) => f.status === "pending" || f.status === "indexing");
+    if (pendingFiles.length > 0) {
+      const configResult = await ctx.db.execute(sql`
+        SELECT key, value FROM tenant_settings WHERE tenant_id = ${tenantId} AND key LIKE 'hebbs_%'
+      `);
+      const config: Record<string, string> = {};
+      for (const r of configResult as unknown as Array<{ key: string; value: string }>) config[r.key] = r.value;
+
+      if (config.hebbs_endpoint && config.hebbs_api_key) {
+        try {
+          const { HebbsRestClient } = await import("@hebbs/sdk");
+          const hb = new HebbsRestClient(config.hebbs_endpoint.replace(/\/$/, ""), { apiKey: config.hebbs_api_key });
+          for (const f of pendingFiles) {
+            try {
+              const status = await hb.fileStatus(f.remotePath);
+              if (status.status === "indexed" && f.status !== "indexed") {
+                await ctx.db.execute(sql`UPDATE crm_knowledge_files SET status = 'indexed' WHERE id = ${f.id}`);
+                f.status = "indexed";
+              } else if (status.status === "indexing" && f.status !== "indexing") {
+                await ctx.db.execute(sql`UPDATE crm_knowledge_files SET status = 'indexing' WHERE id = ${f.id}`);
+                f.status = "indexing";
+              }
+            } catch { /* skip individual file errors */ }
+          }
+        } catch { /* skip if Hebbs unreachable */ }
+      }
+    }
+
+    return c.json({ files: files.map(({ remotePath: _, ...f }) => f) });
   });
 
   // GET /files/:id/status — get real-time indexing status from Hebbs
