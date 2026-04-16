@@ -129,9 +129,13 @@ app.schema(`
     size INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'pending',
     remote_path TEXT NOT NULL,
+    entity_type TEXT NOT NULL DEFAULT 'org',
+    entity_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );
   CREATE INDEX IF NOT EXISTS crm_knowledge_files_tenant_idx ON crm_knowledge_files(tenant_id);
+  ALTER TABLE crm_knowledge_files ADD COLUMN IF NOT EXISTS entity_type TEXT DEFAULT 'org';
+  ALTER TABLE crm_knowledge_files ADD COLUMN IF NOT EXISTS entity_id TEXT;
 `);
 
 // CRM context providers — teach copilot about CRM data

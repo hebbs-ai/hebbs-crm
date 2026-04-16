@@ -80,15 +80,29 @@ export function createMemoryRoutes(ctx: CrmContext) {
     return c.json({ configured: false });
   });
 
-  // GET /files — list files in knowledge base
+  // GET /files — list files, optionally filtered by entity
+  // ?entityType=contact&entityId=uuid OR no params for org-level (Knowledge Base)
   app.get("/files", async (c) => {
     const tenantId = c.req.header("X-Tenant-Id")!;
-    const result = await ctx.db.execute(sql`
-      SELECT id, name, size, status, remote_path as "remotePath", created_at as "createdAt"
-      FROM crm_knowledge_files
-      WHERE tenant_id = ${tenantId}
-      ORDER BY created_at DESC
-    `);
+    const entityType = c.req.query("entityType");
+    const entityId = c.req.query("entityId");
+
+    let result;
+    if (entityType && entityId) {
+      result = await ctx.db.execute(sql`
+        SELECT id, name, size, status, entity_type as "entityType", entity_id as "entityId", remote_path as "remotePath", created_at as "createdAt"
+        FROM crm_knowledge_files
+        WHERE tenant_id = ${tenantId} AND entity_type = ${entityType} AND entity_id = ${entityId}
+        ORDER BY created_at DESC
+      `);
+    } else {
+      result = await ctx.db.execute(sql`
+        SELECT id, name, size, status, entity_type as "entityType", entity_id as "entityId", remote_path as "remotePath", created_at as "createdAt"
+        FROM crm_knowledge_files
+        WHERE tenant_id = ${tenantId}
+        ORDER BY created_at DESC
+      `);
+    }
     const files = result as unknown as Array<{ id: string; name: string; size: number; status: string; remotePath: string; createdAt: string }>;
 
     // For pending files, check Hebbs status and update
@@ -185,8 +199,18 @@ export function createMemoryRoutes(ctx: CrmContext) {
     const file = formData.get("file") as File | null;
     if (!file) return c.json({ error: "No file provided" }, 400);
 
+    const entityType = formData.get("entityType") as string | null;
+    const entityId = formData.get("entityId") as string | null;
+
     const content = new Uint8Array(await file.arrayBuffer());
-    const remotePath = `${tenantId}/${file.name}`;
+
+    // Build Hebbs path: {tenantId}/entities/{entityScope}/{filename}
+    // entityScope: "org" for Knowledge Base, "contact-{id}" for contacts, etc.
+    let entityScope = "org";
+    if (entityType && entityId) {
+      entityScope = `${entityType}-${entityId}`;
+    }
+    const remotePath = `${tenantId}/entities/${entityScope}/${file.name}`;
 
     // Upload to Hebbs
     try {
@@ -201,11 +225,12 @@ export function createMemoryRoutes(ctx: CrmContext) {
     const { randomUUID } = await import("node:crypto");
     const fileId = randomUUID();
     await ctx.db.execute(sql`
-      INSERT INTO crm_knowledge_files (id, tenant_id, name, size, status, remote_path, created_at)
-      VALUES (${fileId}, ${tenantId}, ${file.name}, ${content.length}, 'pending', ${remotePath}, now())
+      INSERT INTO crm_knowledge_files (id, tenant_id, name, size, status, remote_path, entity_type, entity_id, created_at)
+      VALUES (${fileId}, ${tenantId}, ${file.name}, ${content.length}, 'pending', ${remotePath},
+        ${entityType ?? "org"}, ${entityId ?? null}, now())
     `);
 
-    return c.json({ id: fileId, name: file.name, status: "indexed" }, 201);
+    return c.json({ id: fileId, name: file.name, status: "pending" }, 201);
   });
 
   // DELETE /files/:id — delete file from knowledge base

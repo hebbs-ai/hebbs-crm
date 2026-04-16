@@ -41,7 +41,7 @@ export function KnowledgeBasePage() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      await upload.mutateAsync(file);
+      await upload.mutateAsync({ file, entityType: "org" });
     } catch {
       // error available via upload.error
     }
@@ -123,8 +123,9 @@ export function KnowledgeBasePage() {
         />
       ) : (
         <div className="rounded-lg border border-border">
-          <div className="grid grid-cols-[1fr_100px_100px_160px_60px] gap-4 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary border-b border-border">
+          <div className="grid grid-cols-[1fr_80px_100px_100px_160px_60px] gap-4 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary border-b border-border">
             <span>Name</span>
+            <span>Scope</span>
             <span>Size</span>
             <span>Status</span>
             <span>Uploaded</span>
@@ -133,9 +134,14 @@ export function KnowledgeBasePage() {
           {files.map((file) => (
             <div
               key={file.id}
-              className="grid grid-cols-[1fr_100px_100px_160px_60px] gap-4 px-4 py-3 border-b border-border last:border-b-0 items-center hover:bg-bg-secondary transition-colors"
+              className="grid grid-cols-[1fr_80px_100px_100px_160px_60px] gap-4 px-4 py-3 border-b border-border last:border-b-0 items-center hover:bg-bg-secondary transition-colors"
             >
               <div className="text-sm font-medium text-text-primary truncate">{file.name}</div>
+              <div>
+                <Badge color={file.entityType === "org" || !file.entityType ? "purple" : "blue"}>
+                  {file.entityType || "org"}
+                </Badge>
+              </div>
               <div className="text-sm text-text-secondary">{formatFileSize(file.size)}</div>
               <div className="flex items-center gap-1.5">
                 <Badge color={file.status === "indexed" ? "green" : file.status === "pending" || file.status === "indexing" ? "yellow" : "gray"}>

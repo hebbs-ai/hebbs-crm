@@ -10,6 +10,7 @@ import { PropertyRow } from "../components/ui/PropertyRow";
 import { ActivityTimeline } from "../components/ActivityTimeline";
 import { Badge } from "../components/ui/Badge";
 import { EntityTasks } from "../components/EntityTasks";
+import { EntityDocuments } from "../components/EntityDocuments";
 import type { Contact, Deal, Activity, ActivityType } from "@boringos-crm/shared";
 
 /* ── Enrichment types ── */
@@ -305,6 +306,11 @@ export function CompanyDetailPage() {
           {/* Tasks */}
           <div>
             <EntityTasks entityType="crm_company" entityId={company.id} />
+          </div>
+
+          {/* Documents */}
+          <div>
+            <EntityDocuments entityType="company" entityId={company.id} />
           </div>
         </div>
       </div>

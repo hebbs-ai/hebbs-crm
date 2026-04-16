@@ -12,6 +12,8 @@ interface KnowledgeFile {
   name: string;
   size: number;
   status: string;
+  entityType?: string;
+  entityId?: string;
   createdAt: string;
 }
 
@@ -65,12 +67,35 @@ export function useFileStatus(fileId: string | undefined) {
   });
 }
 
+export function useEntityFiles(entityType: string, entityId: string) {
+  return useQuery({
+    queryKey: ["memory", "files", entityType, entityId],
+    queryFn: () =>
+      api.get<{ files: KnowledgeFile[] }>(
+        `/memory/files?entityType=${encodeURIComponent(entityType)}&entityId=${encodeURIComponent(entityId)}`,
+      ),
+    refetchInterval: (query) => {
+      const files = query.state.data?.files ?? [];
+      const hasPending = files.some((f) => f.status === "pending" || f.status === "indexing");
+      return hasPending ? 3000 : false;
+    },
+  });
+}
+
+interface UploadFileParams {
+  file: File;
+  entityType?: string;
+  entityId?: string;
+}
+
 export function useUploadFile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, entityType, entityId }: UploadFileParams) => {
       const formData = new FormData();
       formData.append("file", file);
+      if (entityType) formData.append("entityType", entityType);
+      if (entityId) formData.append("entityId", entityId);
 
       const token = localStorage.getItem("token");
       const tenantId = localStorage.getItem("tenantId");
@@ -91,8 +116,13 @@ export function useUploadFile() {
 
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["memory", "files"] });
+      if (variables.entityType && variables.entityId) {
+        qc.invalidateQueries({
+          queryKey: ["memory", "files", variables.entityType, variables.entityId],
+        });
+      }
     },
   });
 }
@@ -102,6 +132,7 @@ export function useDeleteFile() {
   return useMutation({
     mutationFn: (id: string) => api.delete<{ ok: boolean }>(`/memory/files/${id}`),
     onSuccess: () => {
+      // Invalidate all file queries (global + entity-scoped)
       qc.invalidateQueries({ queryKey: ["memory", "files"] });
     },
   });
