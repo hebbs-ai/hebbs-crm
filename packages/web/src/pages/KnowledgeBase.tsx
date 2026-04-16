@@ -137,10 +137,13 @@ export function KnowledgeBasePage() {
             >
               <div className="text-sm font-medium text-text-primary truncate">{file.name}</div>
               <div className="text-sm text-text-secondary">{formatFileSize(file.size)}</div>
-              <div>
-                <Badge color={file.status === "indexed" ? "green" : file.status === "pending" ? "yellow" : "gray"}>
+              <div className="flex items-center gap-1.5">
+                <Badge color={file.status === "indexed" ? "green" : file.status === "pending" || file.status === "indexing" ? "yellow" : "gray"}>
                   {file.status}
                 </Badge>
+                {(file.status === "pending" || file.status === "indexing") && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+                )}
               </div>
               <div className="text-sm text-text-secondary">{formatDate(file.createdAt)}</div>
               <div>

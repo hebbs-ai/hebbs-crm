@@ -48,6 +48,20 @@ export function useKnowledgeFiles() {
   return useQuery({
     queryKey: ["memory", "files"],
     queryFn: () => api.get<{ files: KnowledgeFile[] }>("/memory/files"),
+    refetchInterval: (query) => {
+      // Poll every 3s if any files are pending/indexing
+      const files = query.state.data?.files ?? [];
+      const hasPending = files.some((f) => f.status === "pending" || f.status === "indexing");
+      return hasPending ? 3000 : false;
+    },
+  });
+}
+
+export function useFileStatus(fileId: string | undefined) {
+  return useQuery({
+    queryKey: ["memory", "files", fileId, "status"],
+    queryFn: () => api.get<{ path: string; status: string; sections?: number; memories?: number }>(`/memory/files/${fileId}/status`),
+    enabled: !!fileId,
   });
 }
 

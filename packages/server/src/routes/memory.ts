@@ -171,7 +171,7 @@ export function createMemoryRoutes(ctx: CrmContext) {
     const fileId = randomUUID();
     await ctx.db.execute(sql`
       INSERT INTO crm_knowledge_files (id, tenant_id, name, size, status, remote_path, created_at)
-      VALUES (${fileId}, ${tenantId}, ${file.name}, ${content.length}, 'indexed', ${remotePath}, now())
+      VALUES (${fileId}, ${tenantId}, ${file.name}, ${content.length}, 'pending', ${remotePath}, now())
     `);
 
     return c.json({ id: fileId, name: file.name, status: "indexed" }, 201);
