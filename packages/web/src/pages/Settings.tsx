@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { useSearchParams, useParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { useTeamUsers, useInvitations, useInviteUser, useUpdateUserRole, useRemoveUser, useRevokeInvitation } from "../hooks/useTeam";
 import { useConnectorStatus, useDisconnectConnector } from "../hooks/useConnectors";
+import { useMemoryConfig, useSaveMemoryConfig, useRemoveMemoryConfig } from "../hooks/useMemory";
 import { Modal } from "../components/ui/Modal";
 import { Input, Select } from "../components/ui/FormField";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -403,13 +404,129 @@ function RuntimeCard({ runtime: rt, isEditing, onEdit, onSave, onSetDefault }: {
   );
 }
 
+// --- Memory Tab ---
+
+function MemoryTab() {
+  const { data, isLoading } = useMemoryConfig();
+  const saveConfig = useSaveMemoryConfig();
+  const removeConfig = useRemoveMemoryConfig();
+  const [endpoint, setEndpoint] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const configured = data?.configured ?? false;
+
+  const handleConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await saveConfig.mutateAsync({ endpoint, apiKey });
+      setEndpoint("");
+      setApiKey("");
+    } catch (err: any) {
+      setError(err.message ?? "Failed to connect");
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (confirm("Disconnect memory? This will remove your Hebbs credentials.")) {
+      await removeConfig.mutateAsync();
+    }
+  };
+
+  if (isLoading) {
+    return <p className="text-sm text-text-secondary">Loading memory configuration...</p>;
+  }
+
+  if (configured) {
+    return (
+      <div>
+        <div className="rounded-lg border border-border p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Badge color="green">Memory active</Badge>
+              <span className="text-sm text-text-secondary">{data?.endpoint}</span>
+            </div>
+            <button
+              onClick={handleDisconnect}
+              disabled={removeConfig.isPending}
+              className="rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-bg-hover hover:text-text-red transition-colors disabled:opacity-50"
+            >
+              {removeConfig.isPending ? "Disconnecting..." : "Disconnect"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <Link
+            to="/knowledge"
+            className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
+          >
+            Open Knowledge Base
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="rounded-lg border border-border p-6 max-w-lg">
+        <h3 className="text-sm font-semibold text-text-primary mb-1">Memory not configured</h3>
+        <p className="text-sm text-text-secondary mb-4">
+          Enter your Hebbs credentials to enable memory and knowledge base.
+        </p>
+
+        {error && (
+          <div className="mb-4 rounded-md bg-surface-red px-4 py-2 text-sm text-text-red">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleConnect}>
+          <div className="mb-3">
+            <label className="block text-sm font-medium text-text-primary mb-1">Endpoint URL</label>
+            <input
+              type="url"
+              value={endpoint}
+              onChange={(e) => setEndpoint(e.target.value)}
+              required
+              placeholder="https://your-instance.hebbs.ai"
+              className="w-full rounded-md border border-border bg-bg px-3 py-1.5 text-sm text-text-primary outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-text-primary mb-1">API Key</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              required
+              placeholder="hb_..."
+              className="w-full rounded-md border border-border bg-bg px-3 py-1.5 text-sm text-text-primary outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={saveConfig.isPending}
+            className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+          >
+            {saveConfig.isPending ? "Connecting..." : "Connect"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // --- Main Settings Page ---
 
-type TabKey = "team" | "connectors" | "agents" | "runtimes";
+type TabKey = "team" | "connectors" | "agents" | "runtimes" | "memory";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "team", label: "Team" },
   { key: "connectors", label: "Connectors" },
+  { key: "memory", label: "Memory" },
   { key: "agents", label: "Agents" },
   { key: "runtimes", label: "Runtimes" },
 ];
@@ -472,6 +589,7 @@ export function SettingsPage() {
       </div>
 
       {activeTab === "connectors" && <ConnectorsTab />}
+      {activeTab === "memory" && <MemoryTab />}
       {activeTab === "agents" && <AgentsTab />}
       {activeTab === "runtimes" && <RuntimesTab />}
 

@@ -14,6 +14,7 @@
     "dev": "tsx watch --env-file=../../.env src/index.ts"
   },
   "dependencies": {
+    "@hebbs/sdk": "link:../../../../research/hebbs-repos/hebbs-typescript",
     "@boringos/agent": "link:../../../boringos/packages/@boringos/agent",
     "@boringos/connector-google": "link:../../../boringos/packages/@boringos/connector-google",
     "@boringos/connector-slack": "link:../../../boringos/packages/@boringos/connector-slack",

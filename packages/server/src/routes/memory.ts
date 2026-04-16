@@ -1,0 +1,177 @@
+import { Hono } from "hono";
+import { sql } from "drizzle-orm";
+import type { CrmContext } from "../context.js";
+
+/**
+ * Memory routes — configure Hebbs + Knowledge Base file management.
+ * Memory is opt-in: user enters Hebbs endpoint + API key in Settings.
+ */
+export function createMemoryRoutes(ctx: CrmContext) {
+  const app = new Hono();
+
+  // GET /config — get current memory configuration
+  app.get("/config", async (c) => {
+    const tenantId = c.req.header("X-Tenant-Id")!;
+    const result = await ctx.db.execute(sql`
+      SELECT key, value FROM tenant_settings
+      WHERE tenant_id = ${tenantId} AND key LIKE 'hebbs_%'
+    `);
+    const rows = result as unknown as Array<{ key: string; value: string | null }>;
+    const config: Record<string, string | null> = {};
+    for (const r of rows) config[r.key] = r.value;
+
+    return c.json({
+      configured: !!(config.hebbs_endpoint && config.hebbs_api_key),
+      endpoint: config.hebbs_endpoint ?? null,
+      hasApiKey: !!config.hebbs_api_key,
+    });
+  });
+
+  // POST /config — save Hebbs credentials (validates first)
+  app.post("/config", async (c) => {
+    const tenantId = c.req.header("X-Tenant-Id")!;
+    const body = await c.req.json() as { endpoint: string; apiKey: string };
+
+    if (!body.endpoint || !body.apiKey) {
+      return c.json({ error: "endpoint and apiKey required" }, 400);
+    }
+
+    // Validate connection
+    try {
+      const url = body.endpoint.replace(/\/$/, "");
+      const res = await fetch(`${url}/v1/system/health`, {
+        headers: { Authorization: `Bearer ${body.apiKey}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return c.json({ error: `Hebbs connection failed: HTTP ${res.status}` }, 400);
+      }
+    } catch (err) {
+      return c.json({ error: `Cannot reach Hebbs at ${body.endpoint}: ${err instanceof Error ? err.message : String(err)}` }, 400);
+    }
+
+    // Store credentials
+    for (const [key, value] of [["hebbs_endpoint", body.endpoint], ["hebbs_api_key", body.apiKey]]) {
+      const existing = await ctx.db.execute(sql`
+        SELECT id FROM tenant_settings WHERE tenant_id = ${tenantId} AND key = ${key} LIMIT 1
+      `);
+      const rows = existing as unknown as Array<{ id: string }>;
+      if (rows[0]) {
+        await ctx.db.execute(sql`
+          UPDATE tenant_settings SET value = ${value}, updated_at = now() WHERE id = ${rows[0].id}
+        `);
+      } else {
+        const { randomUUID } = await import("node:crypto");
+        await ctx.db.execute(sql`
+          INSERT INTO tenant_settings (id, tenant_id, key, value) VALUES (${randomUUID()}, ${tenantId}, ${key}, ${value})
+        `);
+      }
+    }
+
+    return c.json({ configured: true });
+  });
+
+  // DELETE /config — remove Hebbs credentials (disable memory)
+  app.delete("/config", async (c) => {
+    const tenantId = c.req.header("X-Tenant-Id")!;
+    await ctx.db.execute(sql`
+      DELETE FROM tenant_settings WHERE tenant_id = ${tenantId} AND key LIKE 'hebbs_%'
+    `);
+    return c.json({ configured: false });
+  });
+
+  // GET /files — list files in knowledge base
+  app.get("/files", async (c) => {
+    const tenantId = c.req.header("X-Tenant-Id")!;
+    const result = await ctx.db.execute(sql`
+      SELECT id, name, size, status, created_at as "createdAt"
+      FROM crm_knowledge_files
+      WHERE tenant_id = ${tenantId}
+      ORDER BY created_at DESC
+    `);
+    return c.json({ files: result });
+  });
+
+  // POST /files — upload file to knowledge base
+  app.post("/files", async (c) => {
+    const tenantId = c.req.header("X-Tenant-Id")!;
+
+    // Check memory is configured
+    const configResult = await ctx.db.execute(sql`
+      SELECT value FROM tenant_settings WHERE tenant_id = ${tenantId} AND key = 'hebbs_endpoint' LIMIT 1
+    `);
+    const endpoint = (configResult as unknown as Array<{ value: string }>)[0]?.value;
+    if (!endpoint) {
+      return c.json({ error: "Memory not configured. Go to Settings → Memory to configure." }, 400);
+    }
+
+    const apiKeyResult = await ctx.db.execute(sql`
+      SELECT value FROM tenant_settings WHERE tenant_id = ${tenantId} AND key = 'hebbs_api_key' LIMIT 1
+    `);
+    const apiKey = (apiKeyResult as unknown as Array<{ value: string }>)[0]?.value;
+
+    // Parse multipart form
+    const formData = await c.req.formData();
+    const file = formData.get("file") as File | null;
+    if (!file) return c.json({ error: "No file provided" }, 400);
+
+    const content = new Uint8Array(await file.arrayBuffer());
+    const remotePath = `${tenantId}/${file.name}`;
+
+    // Upload to Hebbs
+    try {
+      const { HebbsRestClient } = await import("@hebbs/sdk");
+      const hb = new HebbsRestClient(endpoint.replace(/\/$/, ""), { apiKey: apiKey ?? "" });
+      await hb.upload(remotePath, content);
+    } catch (err) {
+      return c.json({ error: `Failed to index file: ${err instanceof Error ? err.message : String(err)}` }, 500);
+    }
+
+    // Store file record
+    const { randomUUID } = await import("node:crypto");
+    const fileId = randomUUID();
+    await ctx.db.execute(sql`
+      INSERT INTO crm_knowledge_files (id, tenant_id, name, size, status, remote_path, created_at)
+      VALUES (${fileId}, ${tenantId}, ${file.name}, ${content.length}, 'indexed', ${remotePath}, now())
+    `);
+
+    return c.json({ id: fileId, name: file.name, status: "indexed" }, 201);
+  });
+
+  // DELETE /files/:id — delete file from knowledge base
+  app.delete("/files/:id", async (c) => {
+    const tenantId = c.req.header("X-Tenant-Id")!;
+    const fileId = c.req.param("id");
+
+    // Get file record
+    const fileResult = await ctx.db.execute(sql`
+      SELECT remote_path FROM crm_knowledge_files WHERE id = ${fileId} AND tenant_id = ${tenantId} LIMIT 1
+    `);
+    const remotePath = (fileResult as unknown as Array<{ remote_path: string }>)[0]?.remote_path;
+    if (!remotePath) return c.json({ error: "File not found" }, 404);
+
+    // Get Hebbs credentials
+    const configResult = await ctx.db.execute(sql`
+      SELECT key, value FROM tenant_settings WHERE tenant_id = ${tenantId} AND key LIKE 'hebbs_%'
+    `);
+    const config: Record<string, string> = {};
+    for (const r of configResult as unknown as Array<{ key: string; value: string }>) config[r.key] = r.value;
+
+    // Delete from Hebbs
+    if (config.hebbs_endpoint && config.hebbs_api_key) {
+      try {
+        const { HebbsRestClient } = await import("@hebbs/sdk");
+        const hb = new HebbsRestClient(config.hebbs_endpoint.replace(/\/$/, ""), { apiKey: config.hebbs_api_key });
+        await hb.deleteFile(remotePath);
+      } catch {
+        // Non-fatal — delete file record even if Hebbs fails
+      }
+    }
+
+    // Delete file record
+    await ctx.db.execute(sql`DELETE FROM crm_knowledge_files WHERE id = ${fileId}`);
+    return c.json({ ok: true });
+  });
+
+  return app;
+}

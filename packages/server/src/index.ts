@@ -121,6 +121,17 @@ app.schema(`
   CREATE INDEX IF NOT EXISTS crm_activities_tenant_idx ON crm_activities(tenant_id);
   CREATE INDEX IF NOT EXISTS crm_activities_contact_idx ON crm_activities(tenant_id, contact_id);
   CREATE INDEX IF NOT EXISTS crm_activities_deal_idx ON crm_activities(tenant_id, deal_id);
+
+  CREATE TABLE IF NOT EXISTS crm_knowledge_files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    size INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    remote_path TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS crm_knowledge_files_tenant_idx ON crm_knowledge_files(tenant_id);
 `);
 
 // CRM context providers — teach copilot about CRM data

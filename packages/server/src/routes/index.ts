@@ -5,6 +5,7 @@ import { createCompanyRoutes } from "./companies.js";
 import { createDealRoutes } from "./deals.js";
 import { createPipelineRoutes } from "./pipelines.js";
 import { createActivityRoutes } from "./activities.js";
+import { createMemoryRoutes } from "./memory.js";
 import type { CrmContext } from "../context.js";
 
 export function createCrmRoutes(ctx: CrmContext) {
@@ -18,6 +19,7 @@ export function createCrmRoutes(ctx: CrmContext) {
   app.route("/deals", createDealRoutes(ctx));
   app.route("/pipelines", createPipelineRoutes(ctx));
   app.route("/activities", createActivityRoutes(ctx));
+  app.route("/memory", createMemoryRoutes(ctx));
 
   return app;
 }

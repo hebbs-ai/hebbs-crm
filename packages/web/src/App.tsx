@@ -13,6 +13,7 @@ import { TasksPage } from "./pages/Tasks";
 import { CopilotPage } from "./pages/Copilot";
 import { TaskDetailPage } from "./pages/TaskDetail";
 import { SettingsPage } from "./pages/Settings";
+import { KnowledgeBasePage } from "./pages/KnowledgeBase";
 import { InboxPage } from "./pages/Inbox";
 import { LoginPage } from "./pages/Login";
 import { SignupPage } from "./pages/Signup";
@@ -69,6 +70,7 @@ function AppRoutes() {
         <Route path="inbox" element={<InboxPage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="tasks/:id" element={<TaskDetailPage />} />
+        <Route path="knowledge" element={<KnowledgeBasePage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/:tab" element={<SettingsPage />} />
       </Route>
