@@ -92,6 +92,45 @@ export function createMemoryRoutes(ctx: CrmContext) {
     return c.json({ files: result });
   });
 
+  // GET /files/:id/status — get real-time indexing status from Hebbs
+  app.get("/files/:id/status", async (c) => {
+    const tenantId = c.req.header("X-Tenant-Id")!;
+    const fileId = c.req.param("id");
+
+    const fileResult = await ctx.db.execute(sql`
+      SELECT remote_path FROM crm_knowledge_files WHERE id = ${fileId} AND tenant_id = ${tenantId} LIMIT 1
+    `);
+    const remotePath = (fileResult as unknown as Array<{ remote_path: string }>)[0]?.remote_path;
+    if (!remotePath) return c.json({ error: "File not found" }, 404);
+
+    const configResult = await ctx.db.execute(sql`
+      SELECT key, value FROM tenant_settings WHERE tenant_id = ${tenantId} AND key LIKE 'hebbs_%'
+    `);
+    const config: Record<string, string> = {};
+    for (const r of configResult as unknown as Array<{ key: string; value: string }>) config[r.key] = r.value;
+
+    if (!config.hebbs_endpoint || !config.hebbs_api_key) {
+      return c.json({ status: "not_configured" });
+    }
+
+    try {
+      const { HebbsRestClient } = await import("@hebbs/sdk");
+      const hb = new HebbsRestClient(config.hebbs_endpoint.replace(/\/$/, ""), { apiKey: config.hebbs_api_key });
+      const status = await hb.fileStatus(remotePath);
+
+      // Update local status if changed
+      if (status.status === "indexed") {
+        await ctx.db.execute(sql`
+          UPDATE crm_knowledge_files SET status = 'indexed' WHERE id = ${fileId}
+        `);
+      }
+
+      return c.json(status);
+    } catch (err) {
+      return c.json({ status: "error", error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // POST /files — upload file to knowledge base
   app.post("/files", async (c) => {
     const tenantId = c.req.header("X-Tenant-Id")!;
