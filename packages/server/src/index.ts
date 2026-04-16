@@ -198,13 +198,72 @@ app.onEvent("connector.connected", async (event) => {
   const db = dbRef as any;
   if (!db) return;
   const { sql } = await import("drizzle-orm");
-  // Unpause email + calendar sync routines for this tenant
+  // Unpause Google-dependent routines (email sync + calendar check)
   await db.execute(sql`
     UPDATE routines SET status = 'active'
     WHERE tenant_id = ${event.tenantId}
-      AND title LIKE '%Sync%'
+      AND (title LIKE '%Sync%' OR title LIKE '%Calendar Check%')
       AND status = 'paused'
   `).catch(() => {});
+});
+
+// Event-driven: dedup calendar events and wake Meeting Prep for new meetings
+app.onEvent("calendar.upcoming_events", async (event) => {
+  if (!agentEngineRef || !dbRef) return;
+  const db = dbRef as any;
+  const { sql } = await import("drizzle-orm");
+
+  let events: any[] = [];
+  try {
+    const raw = event.data.events;
+    events = typeof raw === "string" ? JSON.parse(raw) : Array.isArray(raw) ? raw : [];
+  } catch { return; }
+
+  if (events.length === 0) return;
+
+  // Filter to events within the next 60 minutes
+  const now = Date.now();
+  const oneHour = now + 60 * 60 * 1000;
+  const upcoming = events.filter((e: any) => {
+    const start = new Date(e.start?.dateTime ?? e.start?.date ?? "").getTime();
+    return start > now && start < oneHour;
+  });
+
+  if (upcoming.length === 0) return;
+
+  // Check which events already have prep tasks (dedup by event ID)
+  const eventIds = upcoming.map((e: any) => e.id).filter(Boolean);
+  const existingTasks = await db.execute(sql`
+    SELECT description FROM tasks
+    WHERE tenant_id = ${event.tenantId}
+      AND origin_kind = 'agent-meeting-prep'
+      AND status IN ('todo', 'in_progress', 'done')
+  `);
+  const preppedIds = new Set<string>();
+  for (const t of existingTasks as any[]) {
+    const desc = t.description ?? "";
+    for (const eid of eventIds) {
+      if (desc.includes(eid)) preppedIds.add(eid);
+    }
+  }
+
+  // Create tasks only for unprepped meetings
+  const newMeetings = upcoming.filter((e: any) => e.id && !preppedIds.has(e.id));
+  if (newMeetings.length === 0) return;
+
+  for (const meeting of newMeetings) {
+    const summary = meeting.summary ?? "Meeting";
+    const start = meeting.start?.dateTime ?? meeting.start?.date ?? "";
+    const attendees = (meeting.attendees ?? []).map((a: any) => a.email).join(", ");
+
+    await wakeAgentByRole(
+      "meeting-prep", event.tenantId,
+      `Meeting prep: ${summary}`,
+      `Prepare for meeting: ${summary}\nEvent ID: ${meeting.id}\nStart: ${start}\nAttendees: ${attendees}\nLocation: ${meeting.location ?? "N/A"}\nDescription: ${meeting.description ?? "N/A"}`,
+      "agent-meeting-prep",
+      { eventId: meeting.id, summary, start, attendees },
+    );
+  }
 });
 
 // Event-driven: wake Enrichment agent when new contacts/companies are created

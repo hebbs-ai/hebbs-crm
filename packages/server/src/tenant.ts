@@ -77,9 +77,46 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
       '*/15 * * * *', 'paused', now(), now())
   `);
 
-  // Calendar: no inbox ingestion — Meeting Prep agent queries calendar directly
+  // 3. Calendar check workflow — fetches upcoming events, emits events for CRM to dedup + wake agent
+  const calCheckWorkflowId = randomUUID();
+  const calCheckBlocks = [
+    { id: "trigger", name: "trigger", type: "trigger", config: {} },
+    {
+      id: "fetch",
+      name: "fetch",
+      type: "connector-action",
+      config: { connectorKind: "google", action: "list_events", inputs: { maxResults: 10, timeMin: "NOW" } },
+    },
+    {
+      id: "emit",
+      name: "emit",
+      type: "emit-event",
+      config: {
+        connectorKind: "calendar",
+        eventType: "calendar.upcoming_events",
+        data: { events: "{{fetch.events}}" },
+      },
+    },
+  ];
+  const calCheckEdges = [
+    { id: "e1", sourceBlockId: "trigger", targetBlockId: "fetch", sourceHandle: null, sortOrder: 0 },
+    { id: "e2", sourceBlockId: "fetch", targetBlockId: "emit", sourceHandle: null, sortOrder: 0 },
+  ];
 
-  // 3. Auto-connect Slack if bot token is configured (server-level)
+  await db.execute(sql`
+    INSERT INTO workflows (id, tenant_id, name, type, status, blocks, edges, created_at, updated_at)
+    VALUES (${calCheckWorkflowId}, ${tenantId}, 'Calendar Check', 'system', 'active',
+      ${JSON.stringify(calCheckBlocks)}::jsonb, ${JSON.stringify(calCheckEdges)}::jsonb, now(), now())
+  `);
+
+  // Calendar check routine — every 30 min, paused until Google connected
+  await db.execute(sql`
+    INSERT INTO routines (id, tenant_id, title, workflow_id, cron_expression, status, created_at, updated_at)
+    VALUES (${randomUUID()}, ${tenantId}, 'Calendar Check (every 30 min)', ${calCheckWorkflowId},
+      '*/30 * * * *', 'paused', now(), now())
+  `);
+
+  // 4. Auto-connect Slack if bot token is configured (server-level)
   const slackBotToken = process.env.SLACK_BOT_TOKEN;
   if (slackBotToken) {
     await db.execute(sql`
@@ -179,7 +216,7 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
     console.warn(`[tenant] Failed to create Follow-up Writer agent:`, err);
   }
 
-  // 9. Create Meeting Prep agent + routine (every 30 min, paused until Google connected)
+  // 9. Create Meeting Prep agent (no direct routine — Calendar Check workflow triggers it via events)
   try {
     const { MEETING_PREP_INSTRUCTIONS } = await import("./agents/meeting-prep.js");
     const rtResult5 = await db.execute(sql`
@@ -187,18 +224,10 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
     `);
     const runtimeId5 = (rtResult5 as unknown as Array<{ id: string }>)[0]?.id;
     if (runtimeId5) {
-      const meetingPrepId = randomUUID();
       await db.execute(sql`
         INSERT INTO agents (id, tenant_id, name, role, status, instructions, runtime_id, created_at, updated_at)
-        VALUES (${meetingPrepId}, ${tenantId}, 'Meeting Prep', 'meeting-prep', 'idle',
+        VALUES (${randomUUID()}, ${tenantId}, 'Meeting Prep', 'meeting-prep', 'idle',
           ${MEETING_PREP_INSTRUCTIONS}, ${runtimeId5}, now(), now())
-      `);
-
-      // Every 30 min, paused until Google Calendar connected
-      await db.execute(sql`
-        INSERT INTO routines (id, tenant_id, title, assignee_agent_id, cron_expression, status, created_at, updated_at)
-        VALUES (${randomUUID()}, ${tenantId}, 'Meeting Prep (every 30 min)', ${meetingPrepId},
-          '*/30 * * * *', 'paused', now(), now())
       `);
     }
   } catch (err) {
