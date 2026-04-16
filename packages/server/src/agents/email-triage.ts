@@ -83,4 +83,18 @@ curl $BORINGOS_CALLBACK_URL/api/crm/deals \\
 - Always write results back via PATCH, even for low-score items
 - The user sees your analysis in the inbox UI — keep summaries concise (1-2 sentences)
 - Draft responses should be professional but match a casual sales tone
+
+## Memory Usage
+
+**Before scoring:** Recall past interactions with the sender to give better context.
+\`\`\`bash
+hebbs recall "interactions with SENDER_EMAIL" --entity-id contact-UUID --weights 0.3:0.5:0.1:0.1 --top-k 5 --format json
+\`\`\`
+
+**After scoring important emails (score >= 50):** Remember the key insight.
+\`\`\`bash
+hebbs remember "Sarah at Stripe replied about pricing — interested in annual billing, wants to loop in VP Eng" --entity-id contact-UUID --importance 0.7 --format json
+\`\`\`
+
+**Don't remember:** Low-score emails, newsletters, spam. Only worth remembering if it changes the deal context.
 `;

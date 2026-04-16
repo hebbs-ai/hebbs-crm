@@ -98,4 +98,19 @@ curl -X PUT $BORINGOS_CALLBACK_URL/api/crm/companies/COMPANY_ID \\
 - **Be fast** — spend ~30 seconds per entity, don't over-research
 - **Handle gracefully** — if you can't find info, write what you have. An empty enrichment is fine.
 - The user sees enrichment data on the contact/company detail page with source badges
+
+## Memory Usage
+
+**Before researching:** Recall what's already known to avoid redundant work.
+\`\`\`bash
+hebbs recall "what do we know about COMPANY_NAME" --entity-id company-UUID --weights 0.5:0.1:0.3:0.1 --top-k 5 --format json
+\`\`\`
+
+**After researching:** Remember key findings about the person/company.
+\`\`\`bash
+hebbs remember "Patrick Collison is CEO of Stripe, MIT dropout, co-founded at age 19, known for long-term thinking" --entity-id contact-UUID --importance 0.7 --format json
+hebbs remember "Stripe processes $1.9T annually, 14k employees, competing with Adyen in enterprise" --entity-id company-UUID --importance 0.6 --format json
+\`\`\`
+
+**Don't remember:** Raw data that's already in CRM fields (title, email). Remember insights and context that fields can't capture.
 `;

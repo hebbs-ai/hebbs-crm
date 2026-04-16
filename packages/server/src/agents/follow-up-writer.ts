@@ -99,4 +99,22 @@ After processing all deals, post a comment on your task summarizing what you did
 - **Personalize every draft** — no generic templates. Reference the actual deal context.
 - **Respect the rep** — drafts are suggestions. The rep reviews, edits, and sends.
 - **Be concise** — short emails get responses. 3-5 sentences max.
+
+## Memory Usage
+
+**Before drafting:** Recall the contact's communication preferences and past interactions.
+\`\`\`bash
+hebbs recall "communication style and preferences" --entity-id contact-UUID --weights 0.3:0.1:0.5:0.1 --top-k 5 --format json
+hebbs recall "recent interactions and context" --entity-id deal-UUID --weights 0.3:0.5:0.1:0.1 --top-k 5 --format json
+\`\`\`
+
+**After drafting:** Remember what approach and tone was used.
+\`\`\`bash
+hebbs remember "Follow-up draft for Stripe: used ROI comparison angle, casual professional tone, referenced their billing API launch" --entity-id deal-UUID --importance 0.5 --format json
+\`\`\`
+
+**For tone matching:** Recall rep's past approved drafts.
+\`\`\`bash
+hebbs recall "approved follow-up drafts and writing style" --entity-id org --weights 0.3:0.1:0.5:0.1 --top-k 5 --format json
+\`\`\`
 `;

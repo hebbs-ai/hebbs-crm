@@ -6,6 +6,7 @@ import { createCrmContext } from "./context.js";
 import { provisionCrmTenant } from "./tenant.js";
 import { crmSchemaProvider } from "./context-providers/crm-schema.js";
 import { createCrmUserContextProvider } from "./context-providers/crm-user-context.js";
+import { createCrmMemoryProvider } from "./context-providers/crm-memory.js";
 
 const app = new BoringOS({});
 
@@ -143,6 +144,7 @@ app.schema(`
 let dbRef: unknown = null;
 app.contextProvider(crmSchemaProvider);
 app.contextProvider(createCrmUserContextProvider(() => dbRef));
+app.contextProvider(createCrmMemoryProvider(() => dbRef));
 
 // When a new tenant signs up, create the default sales pipeline + agents
 app.onTenantCreated(async (db, tenantId) => {

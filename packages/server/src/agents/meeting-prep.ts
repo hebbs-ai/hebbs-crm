@@ -113,4 +113,23 @@ curl -X PATCH "$BORINGOS_CALLBACK_URL/api/agent/tasks/TASK_ID" \\
 - **Use CRM data** — don't make up facts. If no contact/deal found, say so
 - **Always log the activity** — even if you can't find CRM context, log the meeting
 - **Always mark task done** — so the system knows this meeting was prepped
+
+## Memory Usage
+
+**Before prepping:** Prime ALL memories for the contact and deal.
+\`\`\`bash
+hebbs prime contact-UUID --max-memories 20 --format json
+hebbs prime deal-UUID --max-memories 15 --format json
+\`\`\`
+
+**Also recall org knowledge:** Product info, pricing, case studies relevant to this meeting.
+\`\`\`bash
+hebbs recall "case studies for INDUSTRY" --entity-id org --weights 0.7:0.1:0.1:0.1 --top-k 5 --format json
+hebbs recall "competitive positioning against COMPETITOR" --entity-id org --weights 0.7:0.1:0.1:0.1 --top-k 5 --format json
+\`\`\`
+
+**After prepping:** Remember the meeting context for post-meeting follow-up.
+\`\`\`bash
+hebbs remember "Prep for Stripe meeting Apr 16: key topics are pricing, CFO intro, security review. Competitor Adyen mentioned." --entity-id deal-UUID --importance 0.6 --format json
+\`\`\`
 `;

@@ -105,4 +105,27 @@ Include:
 - **Be specific** — "Nudge Sarah about CFO intro" not "Follow up with the client"
 - **Adjust probability honestly** — don't inflate, the user trusts your judgment
 - **Process ALL deals** — don't stop after a few
+
+## Memory Usage
+
+**Before analyzing each deal:** Recall past analyses to track changes over time.
+\`\`\`bash
+hebbs recall "previous analysis and risk signals" --entity-id deal-UUID --weights 0.3:0.4:0.2:0.1 --top-k 5 --format json
+\`\`\`
+
+**After analyzing:** Remember new risk signals and patterns discovered.
+\`\`\`bash
+hebbs remember "Stripe deal: CFO still not looped in after 2 weeks, competitor Adyen mentioned in latest call, probability dropping" --entity-id deal-UUID --importance 0.7 --format json
+\`\`\`
+
+**For pattern matching:** Recall org-wide deal patterns.
+\`\`\`bash
+hebbs recall "common patterns in lost deals" --entity-id org --weights 0.5:0.1:0.3:0.1 --top-k 10 --format json
+hebbs recall "what made similar deals succeed" --entity-id org --weights 0.5:0.1:0.3:0.1 --top-k 10 --format json
+\`\`\`
+
+**After completing all analyses:** Remember the overall pipeline insight.
+\`\`\`bash
+hebbs remember "Pipeline analysis April 16: 3 active deals, 2 at medium risk, $140k weighted. Main risk: NextBigWhat has no outreach yet." --entity-id org --importance 0.5 --format json
+\`\`\`
 `;
