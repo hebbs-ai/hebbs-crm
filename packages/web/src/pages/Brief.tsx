@@ -450,14 +450,14 @@ export function BriefPage() {
 
   if (isLoading) {
     return (
-      <div className="px-20 py-8 max-w-[1100px]">
+      <div className="flex-1 overflow-y-auto px-8 py-8 pb-24 max-w-[1100px]">
         <SkeletonBlock />
       </div>
     );
   }
 
   return (
-    <div className="px-20 py-8 max-w-[1100px]">
+    <div className="flex-1 overflow-y-auto px-8 py-8 pb-24 max-w-[1100px]">
       {/* ── Header ── */}
       <h1 className="text-[30px] font-bold tracking-tight leading-tight mb-1">
         {greeting()}, {firstName}.
