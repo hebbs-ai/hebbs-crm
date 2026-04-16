@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { to: "/inbox", label: "Inbox", icon: "\u2709" },
   { to: "/tasks", label: "Tasks", icon: "\u2611" },
   { to: "/copilot", label: "Copilot", icon: "\u25C7" },
-  { to: "/knowledge", label: "Knowledge Base", icon: "\uD83D\uDCDA" },
+  { to: "/knowledge", label: "Knowledge Base", icon: "\u2261" },
 ];
 
 const TOOL_ITEMS = [
