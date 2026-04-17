@@ -11,9 +11,11 @@ import { ActivityTimeline } from "../components/ActivityTimeline";
 import { Badge } from "../components/ui/Badge";
 import { EntityTasks } from "../components/EntityTasks";
 import { EntityDocuments } from "../components/EntityDocuments";
-import type { Deal, Contact } from "@boringos-crm/shared";
+import { ContactDossierView } from "../components/DossierView";
+import type { Deal, Contact, ContactDossier } from "@boringos-crm/shared";
+import { isContactDossier } from "@boringos-crm/shared";
 
-/* ── Enrichment types ── */
+/* ── Legacy enrichment types (backward compat) ── */
 interface EnrichmentField {
   value: string;
   source: string;
@@ -96,7 +98,9 @@ export function ContactDetailPage() {
     return siblingContactsData.data.filter((c: Contact) => c.id !== id);
   }, [siblingContactsData, id]);
 
-  // Extract enrichment and agent insights from customFields
+  // Extract dossier, legacy enrichment, and agent insights from customFields
+  const dossier = contact?.customFields?.dossier as ContactDossier | undefined;
+  const hasDossier = isContactDossier(dossier);
   const enrichment = contact?.customFields?.enrichment as Enrichment | undefined;
   const agentInsights = contact?.customFields?.agentInsights as AgentInsights | undefined;
 
@@ -222,33 +226,6 @@ export function ContactDetailPage() {
             </div>
           </div>
 
-          {/* Enrichment */}
-          <div>
-            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">Enrichment</h2>
-            <div className="rounded-lg border border-border p-4">
-              {enrichment && Object.keys(enrichment.fields).length > 0 ? (
-                <>
-                  <div className="space-y-2.5">
-                    {Object.entries(enrichment.fields).map(([key, field]) => (
-                      <div key={key} className={`flex items-start justify-between gap-2 border-b border-border pb-2 last:border-0 last:pb-0 ${confidenceStyle(field.confidence)}`}>
-                        <div>
-                          <span className="text-[12px] text-text-secondary block">{formatFieldLabel(key)}</span>
-                          <span className="text-sm text-text-primary">{field.value}</span>
-                        </div>
-                        <Badge color={sourceBadgeColor(field.source)}>{field.source}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-3 text-[11px] text-text-tertiary">
-                    Enriched by agent {"\u00b7"} {new Date(enrichment.enrichedAt).toLocaleDateString()}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-text-tertiary italic">Awaiting enrichment...</p>
-              )}
-            </div>
-          </div>
-
           {/* Connected To */}
           <div>
             <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">Connected To</h2>
@@ -311,6 +288,42 @@ export function ContactDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Full-width Dossier below two-column area ── */}
+      {hasDossier ? (
+        <ContactDossierView
+          data={dossier!}
+          entityName={`${contact.firstName} ${contact.lastName}`}
+        />
+      ) : enrichment && Object.keys(enrichment.fields).length > 0 ? (
+        /* Legacy enrichment fallback — rendered inline, not in sidebar */
+        <div className="mt-8 border border-border rounded-lg p-6">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">Enrichment</h2>
+          <div className="space-y-2.5">
+            {Object.entries(enrichment.fields).map(([key, field]) => (
+              <div key={key} className={`flex items-start justify-between gap-2 border-b border-border pb-2 last:border-0 last:pb-0 ${confidenceStyle(field.confidence)}`}>
+                <div>
+                  <span className="text-[12px] text-text-secondary block">{formatFieldLabel(key)}</span>
+                  <span className="text-sm text-text-primary">{field.value}</span>
+                </div>
+                <Badge color={sourceBadgeColor(field.source)}>{field.source}</Badge>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] text-text-tertiary">
+            Enriched by agent {"\u00b7"} {new Date(enrichment.enrichedAt).toLocaleDateString()}
+          </p>
+        </div>
+      ) : (
+        <div className="mt-8 border border-dashed border-border rounded-lg p-8 text-center">
+          <p className="text-sm text-text-tertiary italic">
+            Hebbs is researching {contact.firstName} {contact.lastName}...
+          </p>
+          <p className="text-[11px] text-text-tertiary mt-1">
+            The dossier will appear here once enrichment completes.
+          </p>
+        </div>
+      )}
 
       <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Edit Contact">
         <ContactForm

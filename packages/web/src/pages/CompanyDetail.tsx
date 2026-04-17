@@ -11,9 +11,11 @@ import { ActivityTimeline } from "../components/ActivityTimeline";
 import { Badge } from "../components/ui/Badge";
 import { EntityTasks } from "../components/EntityTasks";
 import { EntityDocuments } from "../components/EntityDocuments";
-import type { Contact, Deal, Activity, ActivityType } from "@boringos-crm/shared";
+import { CompanyDossierView } from "../components/DossierView";
+import type { Contact, Deal, Activity, ActivityType, CompanyDossier } from "@boringos-crm/shared";
+import { isCompanyDossier } from "@boringos-crm/shared";
 
-/* ── Enrichment types ── */
+/* ── Legacy enrichment types (backward compat) ── */
 interface EnrichmentField {
   value: string;
   source: string;
@@ -104,7 +106,9 @@ export function CompanyDetailPage() {
     return counts;
   }, [activities]);
 
-  // Extract enrichment and agent intelligence from customFields
+  // Extract dossier, legacy enrichment, and agent intelligence from customFields
+  const dossier = company?.customFields?.dossier as CompanyDossier | undefined;
+  const hasDossier = isCompanyDossier(dossier);
   const enrichment = company?.customFields?.enrichment as Enrichment | undefined;
   const agentIntelligence = company?.customFields?.agentIntelligence as AgentIntelligence | undefined;
 
@@ -167,7 +171,6 @@ export function CompanyDetailPage() {
               {agentIntelligence ? (
                 <p className="text-sm text-text-primary whitespace-pre-line">{agentIntelligence.narrative}</p>
               ) : enrichment && Object.keys(enrichment.fields).length > 0 ? (
-                /* If we have enrichment but no agent intelligence narrative, show enriched fields here */
                 <div className="space-y-2">
                   {Object.entries(enrichment.fields).map(([key, field]) => (
                     <div key={key} className="flex items-start gap-2">
@@ -255,33 +258,6 @@ export function CompanyDetailPage() {
             </div>
           </div>
 
-          {/* Enrichment */}
-          <div>
-            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">Enrichment</h2>
-            <div className="rounded-lg border border-border p-4">
-              {enrichment && Object.keys(enrichment.fields).length > 0 ? (
-                <>
-                  <div className="space-y-2.5">
-                    {Object.entries(enrichment.fields).map(([key, field]) => (
-                      <div key={key} className={`flex items-start justify-between gap-2 border-b border-border pb-2 last:border-0 last:pb-0 ${confidenceStyle(field.confidence)}`}>
-                        <div>
-                          <span className="text-[12px] text-text-secondary block">{formatFieldLabel(key)}</span>
-                          <span className="text-sm text-text-primary">{field.value}</span>
-                        </div>
-                        <Badge color={sourceBadgeColor(field.source)}>{field.source}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-3 text-[11px] text-text-tertiary">
-                    Enriched by agent {"\u00b7"} {new Date(enrichment.enrichedAt).toLocaleDateString()}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-text-tertiary italic">Awaiting enrichment...</p>
-              )}
-            </div>
-          </div>
-
           {/* Details */}
           <div>
             <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">Details</h2>
@@ -314,6 +290,42 @@ export function CompanyDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Full-width Dossier below two-column area ── */}
+      {hasDossier ? (
+        <CompanyDossierView
+          data={dossier!}
+          entityName={company.name}
+        />
+      ) : enrichment && Object.keys(enrichment.fields).length > 0 ? (
+        /* Legacy enrichment fallback — rendered full-width, not in sidebar */
+        <div className="mt-8 border border-border rounded-lg p-6">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">Enrichment</h2>
+          <div className="space-y-2.5">
+            {Object.entries(enrichment.fields).map(([key, field]) => (
+              <div key={key} className={`flex items-start justify-between gap-2 border-b border-border pb-2 last:border-0 last:pb-0 ${confidenceStyle(field.confidence)}`}>
+                <div>
+                  <span className="text-[12px] text-text-secondary block">{formatFieldLabel(key)}</span>
+                  <span className="text-sm text-text-primary">{field.value}</span>
+                </div>
+                <Badge color={sourceBadgeColor(field.source)}>{field.source}</Badge>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] text-text-tertiary">
+            Enriched by agent {"\u00b7"} {new Date(enrichment.enrichedAt).toLocaleDateString()}
+          </p>
+        </div>
+      ) : (
+        <div className="mt-8 border border-dashed border-border rounded-lg p-8 text-center">
+          <p className="text-sm text-text-tertiary italic">
+            Hebbs is researching {company.name}...
+          </p>
+          <p className="text-[11px] text-text-tertiary mt-1">
+            The dossier will appear here once enrichment completes.
+          </p>
+        </div>
+      )}
 
       <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Edit Company">
         <CompanyForm

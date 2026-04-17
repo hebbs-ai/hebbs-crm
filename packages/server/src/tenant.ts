@@ -146,9 +146,9 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
     console.warn(`[tenant] Failed to create Email Triage agent:`, err);
   }
 
-  // 6. Create Enrichment agent
+  // 6. Create Enrichment agents (contact + company dossier)
   try {
-    const { ENRICHMENT_INSTRUCTIONS } = await import("./agents/enrichment.js");
+    const { CONTACT_DOSSIER_INSTRUCTIONS, COMPANY_DOSSIER_INSTRUCTIONS } = await import("./agents/enrichment.js");
     const rtResult2 = await db.execute(sql`
       SELECT id FROM runtimes WHERE tenant_id = ${tenantId} AND type = 'claude' LIMIT 1
     `);
@@ -156,12 +156,17 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
     if (runtimeId2) {
       await db.execute(sql`
         INSERT INTO agents (id, tenant_id, name, role, status, instructions, runtime_id, created_at, updated_at)
-        VALUES (${randomUUID()}, ${tenantId}, 'Enrichment', 'enrichment', 'idle',
-          ${ENRICHMENT_INSTRUCTIONS}, ${runtimeId2}, now(), now())
+        VALUES (${randomUUID()}, ${tenantId}, 'Contact Enrichment', 'enrichment-contact', 'idle',
+          ${CONTACT_DOSSIER_INSTRUCTIONS}, ${runtimeId2}, now(), now())
+      `);
+      await db.execute(sql`
+        INSERT INTO agents (id, tenant_id, name, role, status, instructions, runtime_id, created_at, updated_at)
+        VALUES (${randomUUID()}, ${tenantId}, 'Company Enrichment', 'enrichment-company', 'idle',
+          ${COMPANY_DOSSIER_INSTRUCTIONS}, ${runtimeId2}, now(), now())
       `);
     }
   } catch (err) {
-    console.warn(`[tenant] Failed to create Enrichment agent:`, err);
+    console.warn(`[tenant] Failed to create Enrichment agents:`, err);
   }
 
   // 7. Create Deal Analyst agent + daily routine

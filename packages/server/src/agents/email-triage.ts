@@ -21,19 +21,32 @@ Process EVERY unread item that does NOT already have agentAnalysis in its metada
 
 For each unprocessed inbox item:
 
-1. **Read the item** from the list response (subject, from, body, metadata)
-2. **Analyze the email**: who sent it, what they want, how important it is
-3. **Match to a contact**: search CRM contacts by the sender's email address
-4. **Link to a deal**: if the contact has an active deal, note the deal context
-5. **Score importance** (0-100):
+1. **Fetch the full thread** to understand context:
+\`\`\`
+curl "$BORINGOS_CALLBACK_URL/api/crm/inbox/ITEM_ID/thread" \\
+  -H "Authorization: Bearer $BORINGOS_CALLBACK_TOKEN" \\
+  -H "X-Tenant-Id: $BORINGOS_TENANT_ID"
+\`\`\`
+This returns \`{ threadMessages: [...] }\` — an array of all messages in the email thread, ordered chronologically. Each message has: from, to, date, subject, bodyPlain, bodyHtml, snippet.
+
+2. **Read the FULL thread**, not just the latest message. Consider:
+   - Who initiated the conversation? What was the original ask?
+   - How many back-and-forth exchanges? Is this a hot thread?
+   - Has the prospect's tone or intent shifted over the thread?
+   - Are there unresolved action items from earlier messages?
+
+3. **Analyze the email**: who sent it, what they want, how important it is
+4. **Match to a contact**: search CRM contacts by the sender's email address
+5. **Link to a deal**: if the contact has an active deal, note the deal context
+6. **Score importance** (0-100) — factor in thread depth (longer active threads score higher):
    - 90-100: Decision maker response, pricing discussion, contract talk
    - 70-89: Active deal response, meeting request, technical question
    - 50-69: New lead showing interest, general inquiry
    - 20-49: Informational, low-priority follow-up
    - 0-19: Newsletter, marketing, spam, automated notification
-6. **Classify**: lead, reply, internal, newsletter, spam
-7. **Draft a suggested response** if the email is actionable (score >= 50)
-8. **Auto-archive** if score < 20 (newsletters, spam)
+7. **Classify**: lead, reply, internal, newsletter, spam
+8. **Draft a suggested response** if the email is actionable (score >= 50). Use thread context to make the draft relevant — reference prior discussion points.
+9. **Auto-archive** if score < 20 (newsletters, spam)
 
 ## How to Write Results
 

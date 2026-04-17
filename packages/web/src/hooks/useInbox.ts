@@ -71,3 +71,67 @@ export function useCreateTaskFromInbox() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["inbox"] }),
   });
 }
+
+// Thread messages for the email viewer modal
+
+export interface ThreadMessage {
+  id: string;
+  threadId: string;
+  subject: string | null;
+  from: string | null;
+  to: string | null;
+  date: string | null;
+  bodyPlain: string | null;
+  bodyHtml: string | null;
+  snippet: string | null;
+}
+
+async function crmFetch<T>(path: string, opts?: RequestInit): Promise<T> {
+  const res = await fetch(`/api/crm/inbox${path}`, { headers: authHeaders(), ...opts });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export function useReplyToEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: string }) =>
+      crmFetch<{ ok: boolean; messageId?: string }>(`/${id}/reply`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["inbox"] });
+      qc.invalidateQueries({ queryKey: ["inbox", vars.id, "thread"] });
+    },
+  });
+}
+
+export function useArchiveInGmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      crmFetch<{ ok: boolean }>(`/${id}/archive-gmail`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["inbox"] }),
+  });
+}
+
+export function useSyncInbox() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => crmFetch<{ created: number; threads: number }>("/sync", { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["inbox"] }),
+  });
+}
+
+export function useInboxThread(itemId: string | null) {
+  return useQuery({
+    queryKey: ["inbox", itemId, "thread"],
+    queryFn: () => crmFetch<{ threadMessages: ThreadMessage[] }>(`/${itemId}/thread`),
+    enabled: !!itemId,
+    staleTime: 5 * 60 * 1000, // cache for 5 min
+  });
+}
