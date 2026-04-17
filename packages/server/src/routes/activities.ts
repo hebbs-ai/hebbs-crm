@@ -92,3 +92,18 @@ export function createActivityRoutes(ctx: CrmContext) {
 
   return app;
 }
+
+export function agentDocs(url: string): string {
+  const tid = "$BORINGOS_TENANT_ID";
+  return `**Activities** — timeline of interactions (call/email/meeting/note/task). Fields: id, type, subject, body, contactId, dealId, companyId, occurredAt.
+
+\`\`\`
+curl -s ${url}/api/crm/activities?contactId=ID&dealId=ID&type=note -H "X-Tenant-Id: ${tid}"
+curl -s ${url}/api/crm/activities/ID -H "X-Tenant-Id: ${tid}"
+curl -s ${url}/api/crm/activities/timeline/CONTACT_ID -H "X-Tenant-Id: ${tid}"
+curl -s -X POST ${url}/api/crm/activities -H "X-Tenant-Id: ${tid}" -H "Content-Type: application/json" \\
+  -d '{"type":"note","subject":"...","body":"...","dealId":"...","contactId":"..."}'
+curl -s -X PUT ${url}/api/crm/activities/ID -H "X-Tenant-Id: ${tid}" -H "Content-Type: application/json" -d '{...}'
+curl -s -X DELETE ${url}/api/crm/activities/ID -H "X-Tenant-Id: ${tid}"
+\`\`\``;
+}

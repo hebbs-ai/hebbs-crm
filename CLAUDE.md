@@ -41,6 +41,17 @@ When in doubt: check if BoringOS already has it. If it does, use it. If it almos
 | CRM context providers | Teach agents about CRM data |
 | Agent instructions/personas | CRM-specific agent behaviors |
 
+## Teaching Agents About CRM Endpoints
+
+Agents learn the CRM API via the framework's built-in `api-catalog` context provider. When the CRM mounts routes with `app.route("/api/crm", routes, { agentDocs })`, the framework injects those docs into every agent run's system prompt — **no app-level context provider needed**.
+
+**Single source of truth:** each file in `packages/server/src/routes/` exports both its Hono router and an `agentDocs(url: string): string` function that documents the endpoints agents should use. `context-providers/crm-schema.ts` aggregates them into `crmAgentDocs(url)`, which is passed to `app.route()` in `index.ts`.
+
+**Rules:**
+- When you add a new route group, add an `agentDocs` export to the route file and import it in `crm-schema.ts`.
+- When you change an endpoint (new param, different body shape, new verb), update `agentDocs` in the same file in the same commit. Stale prompt docs = agents that try to call endpoints that no longer exist.
+- If a route is operator/UI-only and agents shouldn't call it, omit it from `agentDocs` — the function documents the *agent-facing* subset, not every route.
+
 ## Architecture
 
 ```

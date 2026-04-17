@@ -116,3 +116,19 @@ export function createContactRoutes(ctx: CrmContext) {
 
   return app;
 }
+
+export function agentDocs(url: string): string {
+  const tid = "$BORINGOS_TENANT_ID";
+  return `**Contacts** — people we sell to. Fields: id, firstName, lastName, email, phone, title, companyId, linkedIn, source, tags, customFields.
+
+\`\`\`
+curl -s ${url}/api/crm/contacts?search=NAME&companyId=ID -H "X-Tenant-Id: ${tid}"
+curl -s ${url}/api/crm/contacts/ID -H "X-Tenant-Id: ${tid}"
+curl -s -X POST ${url}/api/crm/contacts -H "X-Tenant-Id: ${tid}" -H "Content-Type: application/json" \\
+  -d '{"firstName":"...","lastName":"...","email":"...","title":"...","companyId":"..."}'
+curl -s -X PUT ${url}/api/crm/contacts/ID -H "X-Tenant-Id: ${tid}" -H "Content-Type: application/json" -d '{...}'
+curl -s -X DELETE ${url}/api/crm/contacts/ID -H "X-Tenant-Id: ${tid}"
+\`\`\`
+
+**Contact dossier** — deep enrichment written by the \`enrichment-contact\` agent and stored at \`customFields.dossier\` on the contact row (returned by GET). Check for \`customFields.dossier\` before asking the user — it may already have the answer. Top-level shape (ContactDossier): \`version, enrichedAt, model, sourceCount, header {monogram, positioning, headline, tags, quickStats}, metrics[], profile {fullName, baseCities, education, affiliations}, contactDirectory[], digital[], persona {decisionStyle, philosophy, influences, communicationStyle, quotes}, journey[], financial, verticals[], geography[], market {keyClients, competition}, recognition[], alerts[], sources[]\`. Missing or empty \`dossier\` means the contact hasn't been enriched yet.`;
+}

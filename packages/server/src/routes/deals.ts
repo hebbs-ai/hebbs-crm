@@ -122,3 +122,18 @@ export function createDealRoutes(ctx: CrmContext) {
 
   return app;
 }
+
+export function agentDocs(url: string): string {
+  const tid = "$BORINGOS_TENANT_ID";
+  return `**Deals** — sales opportunities. Value is stored in cents ($50,000 = 5000000). Fields: id, title, value, currency, pipelineId, stageId, probability, expectedCloseDate, contactId, companyId, lostReason, customFields.
+
+\`\`\`
+curl -s ${url}/api/crm/deals?pipelineId=ID&stageId=ID&search=X -H "X-Tenant-Id: ${tid}"
+curl -s ${url}/api/crm/deals/ID -H "X-Tenant-Id: ${tid}"
+curl -s -X POST ${url}/api/crm/deals -H "X-Tenant-Id: ${tid}" -H "Content-Type: application/json" \\
+  -d '{"title":"...","value":5000000,"pipelineId":"...","stageId":"...","contactId":"...","companyId":"..."}'
+curl -s -X PUT ${url}/api/crm/deals/ID -H "X-Tenant-Id: ${tid}" -H "Content-Type: application/json" \\
+  -d '{"stageId":"NEW_STAGE_ID","probability":75}'
+curl -s -X DELETE ${url}/api/crm/deals/ID -H "X-Tenant-Id: ${tid}"
+\`\`\``;
+}

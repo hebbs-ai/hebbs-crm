@@ -106,3 +106,19 @@ export function createCompanyRoutes(ctx: CrmContext) {
 
   return app;
 }
+
+export function agentDocs(url: string): string {
+  const tid = "$BORINGOS_TENANT_ID";
+  return `**Companies** — organizations we sell to. Fields: id, name, domain, industry, size, website, address, customFields.
+
+\`\`\`
+curl -s ${url}/api/crm/companies?search=NAME -H "X-Tenant-Id: ${tid}"
+curl -s ${url}/api/crm/companies/ID -H "X-Tenant-Id: ${tid}"
+curl -s -X POST ${url}/api/crm/companies -H "X-Tenant-Id: ${tid}" -H "Content-Type: application/json" \\
+  -d '{"name":"...","domain":"...","industry":"..."}'
+curl -s -X PUT ${url}/api/crm/companies/ID -H "X-Tenant-Id: ${tid}" -H "Content-Type: application/json" -d '{...}'
+curl -s -X DELETE ${url}/api/crm/companies/ID -H "X-Tenant-Id: ${tid}"
+\`\`\`
+
+**Company dossier** — deep enrichment written by the \`enrichment-company\` agent and stored at \`customFields.dossier\` on the company row (returned by GET). Check for \`customFields.dossier\` before asking the user — it may already have the answer. Top-level shape (CompanyDossier): \`version, enrichedAt, model, sourceCount, header {monogram, positioning, tagline, founded, hq, tags}, metrics[], overview {legalName, type, sector, businessModel, description}, leadership[], verticals[], technology {proprietaryStack, infrastructure, compliance}, clients {segments, keyNames, totalCount, geographicReach}, financial, geography[], competition {competitors, positioning, moat}, recentNews[], recognition[], alerts[], sources[]\`. Missing or empty \`dossier\` means the company hasn't been enriched yet.`;
+}

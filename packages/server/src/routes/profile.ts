@@ -63,3 +63,12 @@ export function createProfileRoutes(ctx: CrmContext) {
 
   return app;
 }
+
+export function agentDocs(url: string): string {
+  const tid = "$BORINGOS_TENANT_ID";
+  return `**Company Profile** — the org's self-description (company_name, company_description, company_products, company_icp, company_differentiators, company_competitors, company_methodology, company_tone). This is the base context injected into every agent run, so you usually already have it. Fetch directly if you need the raw values.
+
+\`\`\`
+curl -s ${url}/api/crm/profile -H "X-Tenant-Id: ${tid}"
+\`\`\``;
+}

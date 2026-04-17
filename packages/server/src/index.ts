@@ -4,7 +4,7 @@ import { slack } from "@boringos/connector-slack";
 import { createCrmRoutes } from "./routes/index.js";
 import { createCrmContext } from "./context.js";
 import { provisionCrmTenant } from "./tenant.js";
-import { crmSchemaProvider } from "./context-providers/crm-schema.js";
+import { crmAgentDocs } from "./context-providers/crm-schema.js";
 import { createCrmUserContextProvider } from "./context-providers/crm-user-context.js";
 import { createCrmMemoryProvider } from "./context-providers/crm-memory.js";
 import { createCompanyProfileProvider } from "./context-providers/crm-company-profile.js";
@@ -144,7 +144,6 @@ app.schema(`
 // Registered before listen() so they're in the context pipeline
 let dbRef: unknown = null;
 app.contextProvider(createCompanyProfileProvider(() => dbRef));
-app.contextProvider(crmSchemaProvider);
 app.contextProvider(createCrmUserContextProvider(() => dbRef));
 app.contextProvider(createCrmMemoryProvider(() => dbRef));
 
@@ -286,16 +285,29 @@ app.onEvent("calendar.upcoming_events", async (event) => {
 });
 
 // Event-driven: wake Enrichment agent when new contacts/companies are created
+// Routes to role-specific agents (enrichment-contact / enrichment-company)
+// Falls back to legacy "enrichment" role for existing tenants
 app.onEvent("entity.created", async (event) => {
   const { entityType, entityId } = event.data as { entityType: string; entityId: string };
   if (entityType !== "crm_contact" && entityType !== "crm_company") return;
   const label = entityType === "crm_contact" ? "contact" : "company";
+  const role = entityType === "crm_contact" ? "enrichment-contact" : "enrichment-company";
+
+  // Try the new role-specific agent first, fall back to legacy "enrichment" role
   await wakeAgentByRole(
-    "enrichment", event.tenantId,
+    role, event.tenantId,
     `Enrich ${label}`,
     `Research and enrich ${label}: ${entityId}\nEntity type: ${entityType}\nEntity ID: ${entityId}`,
     "agent-enrichment",
     event.data as Record<string, unknown>,
+  ).catch(() =>
+    wakeAgentByRole(
+      "enrichment", event.tenantId,
+      `Enrich ${label}`,
+      `Research and enrich ${label}: ${entityId}\nEntity type: ${entityType}\nEntity ID: ${entityId}`,
+      "agent-enrichment",
+      event.data as Record<string, unknown>,
+    )
   );
 });
 
@@ -312,7 +324,7 @@ app.beforeStart(async (ctx) => {
       timestamp: new Date(),
     }).catch(() => {});
   });
-  app.route("/api/crm", createCrmRoutes(crmCtx));
+  app.route("/api/crm", createCrmRoutes(crmCtx), { agentDocs: crmAgentDocs });
 });
 
 const server = await app.listen(3001);

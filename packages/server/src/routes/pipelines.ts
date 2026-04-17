@@ -175,3 +175,14 @@ export function createPipelineRoutes(ctx: CrmContext) {
 
   return app;
 }
+
+export function agentDocs(url: string): string {
+  const tid = "$BORINGOS_TENANT_ID";
+  return `**Pipelines** — sales processes with stages. Each stage has a name, sortOrder, probability, and type (open/won/lost). Use \`GET /pipelines/:id\` to look up stage IDs before moving a deal.
+
+\`\`\`
+curl -s ${url}/api/crm/pipelines -H "X-Tenant-Id: ${tid}"
+curl -s ${url}/api/crm/pipelines/ID -H "X-Tenant-Id: ${tid}"
+curl -s ${url}/api/crm/pipelines/ID/forecast -H "X-Tenant-Id: ${tid}"
+\`\`\``;
+}

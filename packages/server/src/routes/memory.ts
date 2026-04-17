@@ -277,3 +277,16 @@ export function createMemoryRoutes(ctx: CrmContext) {
 
   return app;
 }
+
+export function agentDocs(url: string): string {
+  const tid = "$BORINGOS_TENANT_ID";
+  return `**Knowledge Base Files** — documents indexed into Hebbs memory, scoped to the org or to a specific entity. Use \`entityType=org\` for org-wide docs, or \`entityType=contact|company|deal\` + \`entityId\` for entity-scoped docs.
+
+\`\`\`
+curl -s "${url}/api/crm/memory/files?entityType=org" -H "X-Tenant-Id: ${tid}"
+curl -s "${url}/api/crm/memory/files?entityType=contact&entityId=ID" -H "X-Tenant-Id: ${tid}"
+curl -s -X DELETE ${url}/api/crm/memory/files/ID -H "X-Tenant-Id: ${tid}"
+\`\`\`
+
+Uploads are multipart/form-data and should generally be driven by users in the UI, not agents.`;
+}
