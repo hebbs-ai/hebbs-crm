@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useTask, useUpdateTask, usePostComment } from "../hooks/useTasks";
 import { PropertyRow } from "../components/ui/PropertyRow";
 import { Badge } from "../components/ui/Badge";
@@ -139,7 +141,9 @@ export function TaskDetailPage() {
                         {new Date(c.createdAt).toLocaleString()}
                       </span>
                     </div>
-                    <p className="text-text-primary whitespace-pre-wrap">{c.body}</p>
+                    <div className="text-text-primary copilot-markdown">
+                      <Markdown remarkPlugins={[remarkGfm]}>{c.body}</Markdown>
+                    </div>
                   </div>
                 );
               })}

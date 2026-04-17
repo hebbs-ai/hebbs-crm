@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   useCopilotSessions,
   useCopilotSession,
@@ -96,7 +97,7 @@ function MessageBubble({ msg }: { msg: CopilotMessage }) {
         &#9671;
       </div>
       <div className="flex-1 bg-bg-secondary border-l-2 border-text-blue rounded-lg px-4 py-3 text-sm text-text-primary leading-relaxed copilot-markdown">
-        <Markdown>{msg.content}</Markdown>
+        <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
       </div>
     </div>
   );
