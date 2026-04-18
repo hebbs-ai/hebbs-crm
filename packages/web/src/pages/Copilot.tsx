@@ -186,6 +186,9 @@ function Conversation({ sessionId }: { sessionId: string }) {
             </button>
           )}
         </div>
+        <p className="text-[11px] text-text-tertiary text-center mt-1.5">
+          <kbd className="px-1 py-0.5 rounded bg-bg-secondary font-mono">&#8984;K</kbd> from anywhere in the CRM
+        </p>
       </div>
     </div>
   );
@@ -194,20 +197,23 @@ function Conversation({ sessionId }: { sessionId: string }) {
 function EmptyConversation({ onNewSession }: { onNewSession: () => void }) {
   return (
     <div className="flex-1 flex items-center justify-center">
-      <div className="text-center">
+      <div className="text-center max-w-md px-6">
         <div className="text-4xl mb-3 text-text-tertiary">&#9671;</div>
         <p className="text-sm text-text-secondary">
-          Start a conversation with{" "}
-          <kbd className="px-1.5 py-0.5 rounded bg-bg-secondary text-text-tertiary text-xs font-semibold">
-            &#8984;K
-          </kbd>{" "}
-          or{" "}
+          Start a conversation —{" "}
           <button
             onClick={onNewSession}
             className="text-accent hover:underline"
           >
             click New conversation
           </button>
+        </p>
+        <p className="text-xs text-text-tertiary mt-3 leading-relaxed">
+          Tip: press{" "}
+          <kbd className="px-1.5 py-0.5 rounded bg-bg-secondary text-text-tertiary font-mono">
+            &#8984;K
+          </kbd>{" "}
+          from <span className="font-medium">any page in the CRM</span> to ask the copilot without leaving — try it from a contact or deal page to ask "what do I know about this person?"
         </p>
       </div>
     </div>

@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { to: "/inbox", label: "Inbox", icon: "\u2709" },
   { to: "/actions", label: "Actions", icon: "\u2192", badge: "actionCount" as const },
   { to: "/tasks", label: "Tasks", icon: "\u2611" },
-  { to: "/copilot", label: "Copilot", icon: "\u25C7" },
+  { to: "/copilot", label: "Copilot", icon: "\u25C7", shortcut: "\u2318K" as const },
   { to: "/knowledge", label: "Knowledge Base", icon: "\u2261" },
 ];
 
@@ -80,6 +80,9 @@ export function Sidebar() {
               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-accent text-white">
                 {badges[item.badge]}
               </span>
+            )}
+            {"shortcut" in item && item.shortcut && (
+              <span className="text-[10px] text-text-tertiary font-mono">{item.shortcut}</span>
             )}
           </NavLink>
         ))}
