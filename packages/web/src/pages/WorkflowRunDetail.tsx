@@ -1,0 +1,137 @@
+import { useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import { useWorkflowRun } from "../hooks/useWorkflows";
+import type { BlockRun, BlockRunStatus } from "../hooks/useWorkflows";
+
+function blockStatusColor(status: BlockRunStatus): string {
+  return status === "completed" ? "text-text-green"
+    : status === "failed" ? "text-text-red"
+    : status === "running" ? "text-text-amber"
+    : status === "skipped" ? "text-text-tertiary"
+    : "text-text-secondary";
+}
+
+function blockStatusDot(status: BlockRunStatus): string {
+  return status === "completed" ? "bg-text-green"
+    : status === "failed" ? "bg-text-red"
+    : status === "running" ? "bg-text-amber animate-pulse"
+    : status === "skipped" ? "bg-text-tertiary"
+    : "bg-text-secondary";
+}
+
+function formatDuration(ms: number | null): string {
+  if (ms === null) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60000).toFixed(1)}m`;
+}
+
+function BlockRunCard({ block }: { block: BlockRun }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-border rounded-md overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-bg-hover text-left"
+      >
+        <span className={`w-2 h-2 rounded-full shrink-0 ${blockStatusDot(block.status)}`} />
+        <span className="font-medium text-sm text-text-primary">{block.blockName}</span>
+        <span className="text-[10px] uppercase tracking-wide font-semibold text-text-tertiary px-1.5 py-0.5 rounded border border-border">
+          {block.blockType}
+        </span>
+        <span className={`text-[10px] uppercase tracking-wide font-semibold ${blockStatusColor(block.status)}`}>
+          {block.status}
+        </span>
+        <span className="flex-1" />
+        <span className="text-xs text-text-tertiary">{formatDuration(block.durationMs)}</span>
+        <span className="text-text-tertiary">{open ? "\u25BE" : "\u25B8"}</span>
+      </button>
+      {open && (
+        <div className="border-t border-border px-3 py-3 space-y-3 bg-bg-secondary">
+          {block.error && (
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-text-tertiary font-semibold mb-1">Error</div>
+              <pre className="text-xs text-text-red whitespace-pre-wrap">{block.error}</pre>
+            </div>
+          )}
+          {block.selectedHandle && (
+            <div className="text-xs">
+              <span className="text-text-tertiary">Branch taken: </span>
+              <span className="font-mono text-text-primary">{block.selectedHandle}</span>
+            </div>
+          )}
+          {block.resolvedConfig && Object.keys(block.resolvedConfig).length > 0 && (
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-text-tertiary font-semibold mb-1">Resolved config</div>
+              <pre className="text-xs bg-bg border border-border rounded p-2 overflow-x-auto">{JSON.stringify(block.resolvedConfig, null, 2)}</pre>
+            </div>
+          )}
+          {block.inputContext && Object.keys(block.inputContext).length > 0 && (
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-text-tertiary font-semibold mb-1">Input context</div>
+              <pre className="text-xs bg-bg border border-border rounded p-2 overflow-x-auto">{JSON.stringify(block.inputContext, null, 2)}</pre>
+            </div>
+          )}
+          {block.output && Object.keys(block.output).length > 0 && (
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-text-tertiary font-semibold mb-1">Output</div>
+              <pre className="text-xs bg-bg border border-border rounded p-2 overflow-x-auto">{JSON.stringify(block.output, null, 2)}</pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function WorkflowRunDetailPage() {
+  const { id, runId } = useParams<{ id: string; runId: string }>();
+  const { data, isLoading } = useWorkflowRun(runId);
+
+  if (isLoading) return <div className="p-6 text-sm text-text-secondary">Loading…</div>;
+  if (!data) return <div className="p-6 text-sm text-text-secondary">Run not found</div>;
+
+  const { run, blocks } = data;
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-2">
+          <Link to={`/workflows/${id}`} className="text-sm text-text-secondary hover:text-text-primary">{"\u2190"} Back to workflow</Link>
+        </div>
+
+        <header className="mb-6">
+          <h1 className="text-xl font-semibold text-text-primary font-mono">Run {run.id.slice(0, 8)}</h1>
+          <div className="flex items-center gap-3 mt-1 text-xs text-text-secondary">
+            <span className={`uppercase tracking-wide font-semibold ${run.status === "completed" ? "text-text-green" : run.status === "failed" ? "text-text-red" : "text-text-amber"}`}>
+              {run.status}
+            </span>
+            <span>·</span>
+            <span>{run.triggerType}</span>
+            <span>·</span>
+            <span>{formatDuration(run.durationMs)}</span>
+            <span>·</span>
+            <span>{run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</span>
+          </div>
+          {run.error && <div className="mt-2 text-sm text-text-red">{run.error}</div>}
+        </header>
+
+        {run.triggerPayload && Object.keys(run.triggerPayload).length > 0 && (
+          <section className="mb-6">
+            <h3 className="text-xs uppercase tracking-wide text-text-tertiary font-semibold mb-2">Trigger payload</h3>
+            <pre className="text-xs bg-bg-secondary border border-border rounded-md p-3 overflow-x-auto">{JSON.stringify(run.triggerPayload, null, 2)}</pre>
+          </section>
+        )}
+
+        <section>
+          <h3 className="text-xs uppercase tracking-wide text-text-tertiary font-semibold mb-2">
+            Blocks ({blocks.length})
+          </h3>
+          <div className="space-y-2">
+            {blocks.map((b) => <BlockRunCard key={b.id} block={b} />)}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}

@@ -18,6 +18,7 @@ const NAV_ITEMS = [
 
 const TOOL_ITEMS = [
   { to: "/agents", label: "Agents", icon: "\u2042" },
+  { to: "/workflows", label: "Workflows", icon: "\u21D2" },
   { to: "/settings", label: "Settings", icon: "\u2699" },
 ];
 
