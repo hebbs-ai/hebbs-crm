@@ -59,6 +59,10 @@ export function createDealRoutes(ctx: CrmContext) {
       companyId: created.companyId,
     });
 
+    // Emit event so the Deal Analyst can produce intelligence for this deal
+    // without waiting for the next daily batch run.
+    ctx.emitEvent?.("entity.created", tenantId, { entityType: "crm_deal", entityId: created.id });
+
     return c.json({ data: created }, 201);
   });
 

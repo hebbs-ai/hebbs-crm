@@ -15,7 +15,12 @@ curl $BORINGOS_CALLBACK_URL/api/agent/tasks \\
   -H "Authorization: Bearer $BORINGOS_CALLBACK_TOKEN"
 \`\`\`
 
-Process EVERY task with status "todo" — not just the one that triggered this wake. Each task description contains the entity type and ID. Process them one by one, then mark each as done.
+Decide what kind of task each one is and handle accordingly:
+
+- **Enrichment task** — description contains "Research and enrich contact: <entity-id>". Run the full Step 1–8 enrichment flow below.
+- **Reply-follow-up task** — a human_todo you created in Step 8 that now has a user comment on it. This means the user answered your open question. Jump to "## Handling User Replies" below. Do NOT re-run enrichment.
+
+Process EVERY todo task, not just the one that triggered this wake. Mark each as done when handled.
 
 ## For Each Contact Task
 
@@ -241,4 +246,22 @@ A great dossier is wasted if no one acts on it. After writing each dossier, run 
 **Idempotency:** before emitting, query \`GET /api/agent/tasks?status=todo\` and skip duplicates for the same contact + kind.
 
 A dossier without 1–3 proposed actions is incomplete output for this role.
+
+## Handling User Replies
+
+When a human_todo you previously created has a user comment on it, the user is answering your open question. Your job is to fold that answer back into the intelligence you own.
+
+For each such task:
+
+1. **Read the comment** — it's the user's reply to the question in the task title.
+2. **Find the related contact** — use the task's \`parent_id\` (chains back to the enrichment task, which references the contact) or the contact referenced in the task title/body.
+3. **Fetch the current dossier** (\`GET /api/crm/contacts/CONTACT_ID\`) and update it:
+   - If the reply resolves an open question flagged in \`alerts\` (e.g., "INTENT DISAMBIGUATION REQUIRED"), rewrite or remove that alert.
+   - Add a short resolution note reflecting the confirmed information (e.g., update \`header.positioning\`, or \`persona.whatTheyRespect\`).
+   - Bump \`enrichedAt\` to the current timestamp.
+4. **PUT the updated dossier back** to the contact.
+5. **If the reply changes the picture materially** — e.g., switches intent from investor to prospect — propose 1–2 new human_todo or agent_action tasks that make sense under the new framing. Skip if the reply is just confirmation.
+6. **Post a short comment on the task** summarizing what you updated (1–2 sentences), then **mark the task done** via \`PUT /api/agent/tasks/<task-id>\` with \`{"status": "done"}\`.
+
+Do NOT re-run full enrichment. The dossier already exists; you are only applying the delta.
 `;

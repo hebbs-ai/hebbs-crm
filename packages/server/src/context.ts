@@ -1,7 +1,13 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 export interface AgentEngineRef {
-  wake(req: { tenantId: string; agentId: string; taskId?: string; reason: string }): Promise<unknown>;
+  wake(req: { tenantId: string; agentId: string; taskId?: string; reason: string }): Promise<
+    | { kind: "created"; wakeupRequestId: string }
+    | { kind: "coalesced"; existingWakeupRequestId: string }
+    | { kind: "agent_not_found" }
+    | { kind: "agent_not_invokable"; agentStatus: string }
+  >;
+  enqueue(wakeupRequestId: string): Promise<string>;
 }
 
 export interface WorkflowEngineRef {

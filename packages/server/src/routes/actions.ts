@@ -181,15 +181,28 @@ export function createActionRoutes(ctx: CrmContext) {
       VALUES (${cid}, ${id}, ${tenantId}, ${body.body}, ${userId ?? null}::uuid)
     `);
 
-    // If this task is assigned to an agent (e.g., agent_blocked), wake it.
+    // Wake an agent to process the reply:
+    //  - assignee_agent_id set (e.g., agent_blocked): wake the assignee.
+    //  - else created_by_agent_id set (human_todo the agent proposed and the
+    //    user is now answering): wake the creator so the answer flows back
+    //    into whatever state it owns (dossier, intelligence, plan).
+    // Also enqueue after wake — a bare wake() only writes a DB row; without
+    // enqueue() the job never runs.
     const taskRows = await ctx.db.execute(sql`
-      SELECT assignee_agent_id, origin_kind FROM tasks WHERE id = ${id} AND tenant_id = ${tenantId} LIMIT 1
-    `) as unknown as Array<{ assignee_agent_id: string | null; origin_kind: string }>;
+      SELECT assignee_agent_id, created_by_agent_id, origin_kind
+      FROM tasks WHERE id = ${id} AND tenant_id = ${tenantId} LIMIT 1
+    `) as unknown as Array<{ assignee_agent_id: string | null; created_by_agent_id: string | null; origin_kind: string }>;
     const t = taskRows[0];
-    if (t?.assignee_agent_id) {
-      await ctx.agentEngine?.wake({
-        tenantId, agentId: t.assignee_agent_id, taskId: id, reason: "comment_posted",
-      }).catch(() => { /* best-effort */ });
+    const targetAgentId = t?.assignee_agent_id ?? t?.created_by_agent_id ?? null;
+    if (targetAgentId) {
+      try {
+        const outcome = await ctx.agentEngine?.wake({
+          tenantId, agentId: targetAgentId, taskId: id, reason: "comment_posted",
+        });
+        if (outcome?.kind === "created") {
+          await ctx.agentEngine?.enqueue(outcome.wakeupRequestId);
+        }
+      } catch { /* best-effort */ }
     }
 
     return c.json({ ok: true, id: cid }, 201);
