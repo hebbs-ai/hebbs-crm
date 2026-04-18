@@ -197,6 +197,28 @@ export function useAssignTask() {
   });
 }
 
+interface HandoffInput {
+  taskId: string;
+  toAgentId: string;
+  message?: string;
+  wake?: boolean;
+}
+
+export function useHandoffTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, toAgentId, message, wake }: HandoffInput) =>
+      taskFetch<{ subtaskId?: string; error?: string }>(`/${taskId}/handoff`, {
+        method: "POST",
+        body: JSON.stringify({ toAgentId, message, wake: wake ?? true }),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["tasks", vars.taskId] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}
+
 export function useDeleteTask() {
   const qc = useQueryClient();
   return useMutation({

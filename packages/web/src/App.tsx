@@ -16,6 +16,7 @@ import { SettingsPage } from "./pages/Settings";
 import { KnowledgeBasePage } from "./pages/KnowledgeBase";
 import { InboxPage } from "./pages/Inbox";
 import { ActionsPage } from "./pages/Actions";
+import { AgentsPage } from "./pages/Agents";
 import { LoginPage } from "./pages/Login";
 import { SignupPage } from "./pages/Signup";
 import type { ReactNode } from "react";
@@ -73,6 +74,7 @@ function AppRoutes() {
         <Route path="tasks" element={<TasksPage />} />
         <Route path="tasks/:id" element={<TaskDetailPage />} />
         <Route path="knowledge" element={<KnowledgeBasePage />} />
+        <Route path="agents" element={<AgentsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/:tab" element={<SettingsPage />} />
       </Route>

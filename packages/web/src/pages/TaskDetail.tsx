@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useTask, useUpdateTask, usePostComment, useAssignTask } from "../hooks/useTasks";
+import { useTask, useUpdateTask, usePostComment, useAssignTask, useHandoffTask } from "../hooks/useTasks";
 import { useAgents } from "../hooks/useAgents";
 import { useTeamUsers } from "../hooks/useTeam";
 import { PropertyRow } from "../components/ui/PropertyRow";
@@ -51,10 +51,15 @@ export function TaskDetailPage() {
   const { data, isLoading } = useTask(id);
   const updateTask = useUpdateTask();
   const assignTask = useAssignTask();
+  const handoffTask = useHandoffTask();
   const postComment = usePostComment();
   const { data: agents } = useAgents();
   const { data: usersResp } = useTeamUsers();
   const [commentBody, setCommentBody] = useState("");
+  const [handoffOpen, setHandoffOpen] = useState(false);
+  const [handoffTarget, setHandoffTarget] = useState<string>("");
+  const [handoffMsg, setHandoffMsg] = useState("");
+  const [handoffError, setHandoffError] = useState<string | null>(null);
 
   const task = data?.data;
   const comments = (task as any)?.comments ?? [];
@@ -82,6 +87,28 @@ export function TaskDetailPage() {
     if (a.kind === "agent" && b.kind === "agent") return a.agentId === b.agentId;
     if (a.kind === "user" && b.kind === "user") return a.userId === b.userId;
     return true;
+  };
+
+  const handleHandoff = async () => {
+    if (!handoffTarget) return;
+    setHandoffError(null);
+    try {
+      const res = await handoffTask.mutateAsync({
+        taskId: task.id,
+        toAgentId: handoffTarget,
+        message: handoffMsg || undefined,
+        wake: true,
+      });
+      if ((res as any)?.error) {
+        setHandoffError((res as any).error);
+        return;
+      }
+      setHandoffOpen(false);
+      setHandoffTarget("");
+      setHandoffMsg("");
+    } catch (e: any) {
+      setHandoffError(e?.message ?? "Handoff failed");
+    }
   };
 
   const handleAssigneeChange = async (next: AssigneeValue) => {
@@ -183,6 +210,54 @@ export function TaskDetailPage() {
               })}
             </div>
           )}
+
+          {/* Handoff section */}
+          <div className="mt-6 border-t border-border pt-4">
+            {!handoffOpen ? (
+              <button
+                onClick={() => setHandoffOpen(true)}
+                className="text-sm text-accent hover:underline"
+              >
+                {"\u2192"} Handoff to another agent
+              </button>
+            ) : (
+              <div className="rounded-lg border border-border p-3 bg-bg-secondary">
+                <label className="block text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">Handoff to</label>
+                <select
+                  value={handoffTarget}
+                  onChange={(e) => setHandoffTarget(e.target.value)}
+                  className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm"
+                >
+                  <option value="">Select an agent…</option>
+                  {(agents ?? []).filter((a) => a.id !== task.assigneeAgentId).map((a) => (
+                    <option key={a.id} value={a.id}>{a.name} ({a.role})</option>
+                  ))}
+                </select>
+                <textarea
+                  value={handoffMsg}
+                  onChange={(e) => setHandoffMsg(e.target.value)}
+                  placeholder="Short message explaining the handoff (optional)"
+                  className="mt-2 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm min-h-[60px]"
+                />
+                {handoffError && <p className="mt-1 text-xs text-text-red">{handoffError}</p>}
+                <div className="mt-2 flex gap-2 justify-end">
+                  <button
+                    onClick={() => { setHandoffOpen(false); setHandoffError(null); }}
+                    className="text-sm px-3 py-1 rounded border border-border hover:bg-bg-hover"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleHandoff}
+                    disabled={!handoffTarget || handoffTask.isPending}
+                    className="text-sm px-3 py-1 rounded bg-accent text-white disabled:opacity-50"
+                  >
+                    {handoffTask.isPending ? "Handing off…" : "Hand off & run"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Post comment form */}
           <form onSubmit={handlePostComment} className="mt-4">
