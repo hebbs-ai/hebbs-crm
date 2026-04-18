@@ -65,7 +65,8 @@ export function ActionsPage() {
   }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="max-w-3xl mx-auto">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold text-text-primary">Actions</h1>
         <p className="text-sm text-text-secondary mt-1">
@@ -167,6 +168,7 @@ export function ActionsPage() {
             </div>
           </div>
         ))}
+      </div>
       </div>
     </div>
   );

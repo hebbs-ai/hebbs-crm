@@ -69,9 +69,9 @@ export function CommandBar() {
   );
 
   return (
-    <div className="fixed bottom-0 left-[248px] right-0 z-50 flex flex-col items-center pointer-events-none">
-      <div className="w-full px-6 pb-4 pt-3 bg-gradient-to-t from-bg to-transparent pointer-events-auto">
-        <div className="max-w-[720px] mx-auto bg-bg border border-border-dark shadow-md flex items-center px-4 py-2.5 gap-2 rounded-xl focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15 transition-all">
+    <div className="shrink-0 border-t border-border bg-bg">
+      <div className="w-full px-6 py-3">
+        <div className="max-w-[720px] mx-auto bg-bg border border-border-dark flex items-center px-4 py-2.5 gap-2 rounded-xl focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15 transition-all">
           <span className="text-[13px] font-semibold text-text-tertiary bg-bg-secondary px-1.5 py-0.5 rounded shrink-0">
             &#8984;K
           </span>
