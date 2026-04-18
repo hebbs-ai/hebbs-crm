@@ -315,15 +315,19 @@ app.onEvent("entity.created", async (event) => {
 app.beforeStart(async (ctx) => {
   dbRef = ctx.db;
   agentEngineRef = ctx.agentEngine;
-  const crmCtx = createCrmContext(ctx.db, (type, tenantId, data) => {
-    ctx.eventBus?.emit({
-      connectorKind: "crm",
-      type,
-      tenantId,
-      data,
-      timestamp: new Date(),
-    }).catch(() => {});
-  });
+  const crmCtx = createCrmContext(
+    ctx.db,
+    (type, tenantId, data) => {
+      ctx.eventBus?.emit({
+        connectorKind: "crm",
+        type,
+        tenantId,
+        data,
+        timestamp: new Date(),
+      }).catch(() => {});
+    },
+    ctx.agentEngine as any,
+  );
   app.route("/api/crm", createCrmRoutes(crmCtx), { agentDocs: crmAgentDocs });
 });
 

@@ -88,3 +88,57 @@ export function useExecuteAction() {
     },
   });
 }
+
+export interface ActionComment {
+  id: string;
+  body: string;
+  authorUserId: string | null;
+  authorAgentId: string | null;
+  createdAt: string;
+}
+
+export function useActionComments(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["actions", id, "comments"],
+    queryFn: () => call<{ data: ActionComment[] }>(`/${id}/comments`),
+    enabled,
+  });
+}
+
+export function usePostActionComment(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: string) =>
+      call<{ ok: true }>(`/${id}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["actions", id, "comments"] });
+      qc.invalidateQueries({ queryKey: ["actions"] });
+    },
+  });
+}
+
+export function useParentTask(parentId: string | null) {
+  return useQuery({
+    queryKey: ["actions", "parent", parentId],
+    queryFn: async () => {
+      // Use the framework admin tasks endpoint to fetch parent context.
+      // Falls back gracefully if parent isn't accessible.
+      const token = localStorage.getItem("token");
+      const tenantId = localStorage.getItem("tenantId");
+      const res = await fetch(`/api/admin/tasks/${parentId}`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(tenantId ? { "X-Tenant-Id": tenantId } : {}),
+        },
+      });
+      if (!res.ok) return null;
+      const body = await res.json() as { task?: { id: string; title: string } };
+      return body.task ?? null;
+    },
+    enabled: !!parentId,
+  });
+}

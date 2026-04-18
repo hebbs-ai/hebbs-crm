@@ -131,6 +131,51 @@ export function createActionRoutes(ctx: CrmContext) {
     }
   });
 
+  // GET /:id/comments — list comments on this action
+  app.get("/:id/comments", async (c) => {
+    const tenantId = c.req.header("X-Tenant-Id")!;
+    const id = c.req.param("id");
+    const rows = await ctx.db.execute(sql`
+      SELECT id, body, author_user_id as "authorUserId", author_agent_id as "authorAgentId",
+             created_at as "createdAt"
+      FROM task_comments
+      WHERE task_id = ${id} AND tenant_id = ${tenantId}
+      ORDER BY created_at ASC
+    `) as unknown as Array<Record<string, unknown>>;
+    return c.json({ data: rows });
+  });
+
+  // POST /:id/comments — post a comment (wakes any agent assigned to this task
+  // via the framework's comment_posted hook — important for agent_blocked tasks
+  // where the user's reply unblocks the agent)
+  app.post("/:id/comments", async (c) => {
+    const tenantId = c.req.header("X-Tenant-Id")!;
+    const userId = c.req.header("X-User-Id");
+    const id = c.req.param("id");
+    const body = await c.req.json() as { body?: string };
+    if (!body.body?.trim()) return c.json({ error: "body required" }, 400);
+
+    const { randomUUID } = await import("node:crypto");
+    const cid = randomUUID();
+    await ctx.db.execute(sql`
+      INSERT INTO task_comments (id, task_id, tenant_id, body, author_user_id)
+      VALUES (${cid}, ${id}, ${tenantId}, ${body.body}, ${userId ?? null}::uuid)
+    `);
+
+    // If this task is assigned to an agent (e.g., agent_blocked), wake it.
+    const taskRows = await ctx.db.execute(sql`
+      SELECT assignee_agent_id, origin_kind FROM tasks WHERE id = ${id} AND tenant_id = ${tenantId} LIMIT 1
+    `) as unknown as Array<{ assignee_agent_id: string | null; origin_kind: string }>;
+    const t = taskRows[0];
+    if (t?.assignee_agent_id) {
+      await ctx.agentEngine?.wake({
+        tenantId, agentId: t.assignee_agent_id, taskId: id, reason: "comment_posted",
+      }).catch(() => { /* best-effort */ });
+    }
+
+    return c.json({ ok: true, id: cid }, 201);
+  });
+
   return app;
 }
 
