@@ -290,6 +290,27 @@ async function executeAction(
       return { ok: true, detail: r.data };
     }
 
+    case "resume_workflow": {
+      // Paired with the framework's `wait-for-human` block. The user's approval
+      // (with any edited proposedParams) becomes the userInput handed back to
+      // the paused workflow. Engine.resume() finalizes the paused block and
+      // walks the rest of the DAG.
+      const { workflowRunId } = params as { workflowRunId?: string };
+      if (!workflowRunId) return { ok: false, error: "resume_workflow requires workflowRunId in proposedParams" };
+      if (!ctx.workflowEngine) return { ok: false, error: "workflow engine not available" };
+
+      // Strip the bookkeeping keys; anything else in `params` is user input
+      // from the Edit & Run form that downstream blocks will see.
+      const { kind: _k, workflowRunId: _w, resumeFromBlockId: _r, ...userInput } = params;
+
+      const result = await ctx.workflowEngine.resume(workflowRunId, userInput);
+      return {
+        ok: result.status !== "failed",
+        detail: { runId: result.runId, status: result.status, awaitingActionTaskId: result.awaitingActionTaskId },
+        error: result.error,
+      };
+    }
+
     // Phase 4+ may add: update_stage, send_calendar_invite, nudge, add_to_list
 
     default:

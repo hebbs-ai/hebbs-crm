@@ -289,26 +289,40 @@ app.onEvent("calendar.upcoming_events", async (event) => {
 // Falls back to legacy "enrichment" role for existing tenants
 app.onEvent("entity.created", async (event) => {
   const { entityType, entityId } = event.data as { entityType: string; entityId: string };
-  if (entityType !== "crm_contact" && entityType !== "crm_company") return;
-  const label = entityType === "crm_contact" ? "contact" : "company";
-  const role = entityType === "crm_contact" ? "enrichment-contact" : "enrichment-company";
 
-  // Try the new role-specific agent first, fall back to legacy "enrichment" role
-  await wakeAgentByRole(
-    role, event.tenantId,
-    `Enrich ${label}`,
-    `Research and enrich ${label}: ${entityId}\nEntity type: ${entityType}\nEntity ID: ${entityId}`,
-    "agent-enrichment",
-    event.data as Record<string, unknown>,
-  ).catch(() =>
-    wakeAgentByRole(
-      "enrichment", event.tenantId,
+  if (entityType === "crm_contact" || entityType === "crm_company") {
+    const label = entityType === "crm_contact" ? "contact" : "company";
+    const role = entityType === "crm_contact" ? "enrichment-contact" : "enrichment-company";
+
+    // Try the new role-specific agent first, fall back to legacy "enrichment" role
+    await wakeAgentByRole(
+      role, event.tenantId,
       `Enrich ${label}`,
       `Research and enrich ${label}: ${entityId}\nEntity type: ${entityType}\nEntity ID: ${entityId}`,
       "agent-enrichment",
       event.data as Record<string, unknown>,
-    )
-  );
+    ).catch(() =>
+      wakeAgentByRole(
+        "enrichment", event.tenantId,
+        `Enrich ${label}`,
+        `Research and enrich ${label}: ${entityId}\nEntity type: ${entityType}\nEntity ID: ${entityId}`,
+        "agent-enrichment",
+        event.data as Record<string, unknown>,
+      )
+    );
+    return;
+  }
+
+  if (entityType === "crm_deal") {
+    await wakeAgentByRole(
+      "deal-analyst", event.tenantId,
+      "Analyze new deal",
+      `Analyze deal: ${entityId}\nThis is an event-driven wake for a single new deal. Produce agentIntelligence for just this deal and mark this task done.`,
+      "agent-deal-analysis",
+      event.data as Record<string, unknown>,
+    );
+    return;
+  }
 });
 
 // CRM data routes
@@ -327,6 +341,7 @@ app.beforeStart(async (ctx) => {
       }).catch(() => {});
     },
     ctx.agentEngine as any,
+    ctx.workflowEngine as any,
   );
   app.route("/api/crm", createCrmRoutes(crmCtx), { agentDocs: crmAgentDocs });
 });
