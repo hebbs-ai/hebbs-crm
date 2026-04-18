@@ -1,57 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { GmailClient } from "@boringos/connector-google";
+import { getGmailClient } from "../google-client.js";
 import type { CrmContext } from "../context.js";
-
-/**
- * Get a GmailClient with a fresh access token for the given tenant.
- * Refreshes the token proactively and persists the new token.
- */
-async function getGmailClient(
-  db: CrmContext["db"],
-  tenantId: string,
-): Promise<{ gmail: GmailClient; error?: string } | { gmail?: undefined; error: string }> {
-  const connectorRows = await db.execute(sql`
-    SELECT id, credentials FROM connectors
-    WHERE tenant_id = ${tenantId} AND kind = 'google'
-    LIMIT 1
-  `) as unknown as Array<{ id: string; credentials: Record<string, string> }>;
-
-  const creds = connectorRows[0]?.credentials;
-  if (!creds?.accessToken) {
-    return { error: "Google connector not configured" };
-  }
-
-  let accessToken = creds.accessToken;
-  if (creds.refreshToken) {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    if (clientId && clientSecret) {
-      try {
-        const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            grant_type: "refresh_token",
-            refresh_token: creds.refreshToken,
-            client_id: clientId,
-            client_secret: clientSecret,
-          }).toString(),
-        });
-        if (tokenRes.ok) {
-          const tokenData = await tokenRes.json() as { access_token: string };
-          accessToken = tokenData.access_token;
-          await db.execute(sql`
-            UPDATE connectors SET credentials = credentials || ${JSON.stringify({ accessToken })}::jsonb, updated_at = now()
-            WHERE id = ${connectorRows[0].id}
-          `);
-        }
-      } catch { /* fall through with existing token */ }
-    }
-  }
-
-  return { gmail: new GmailClient(accessToken) };
-}
 
 export function createInboxRoutes(ctx: CrmContext) {
   const app = new Hono();

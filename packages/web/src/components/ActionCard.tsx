@@ -292,6 +292,80 @@ function ParamsEditor({ kind, params, onChange }: {
     );
   }
 
+  if (kind === "reply") {
+    return (
+      <div className="mt-3 border border-border rounded-md p-3 bg-bg-secondary space-y-2">
+        <div className="text-[11px] text-text-tertiary">
+          Replies to inbox item: <code className="font-mono">{(params.inboxItemId as string) ?? "(missing inboxItemId)"}</code>
+        </div>
+        <div>
+          <label className="text-[11px] uppercase tracking-wide text-text-tertiary">Body</label>
+          <textarea
+            value={(params.body as string) ?? ""}
+            onChange={(e) => set("body", e.target.value)}
+            rows={8}
+            className="block w-full mt-0.5 text-sm border border-border rounded px-2 py-1 bg-bg resize-none font-mono"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (kind === "schedule_meeting") {
+    const attendeesStr = Array.isArray(params.attendees) ? (params.attendees as string[]).join(", ") : "";
+    return (
+      <div className="mt-3 border border-border rounded-md p-3 bg-bg-secondary space-y-2">
+        <div>
+          <label className="text-[11px] uppercase tracking-wide text-text-tertiary">Title</label>
+          <input
+            type="text"
+            value={(params.summary as string) ?? ""}
+            onChange={(e) => set("summary", e.target.value)}
+            className="block w-full mt-0.5 text-sm border border-border rounded px-2 py-1 bg-bg"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] uppercase tracking-wide text-text-tertiary">Start</label>
+            <input
+              type="datetime-local"
+              value={(params.startTime as string)?.slice(0, 16) ?? ""}
+              onChange={(e) => set("startTime", new Date(e.target.value).toISOString())}
+              className="block w-full mt-0.5 text-sm border border-border rounded px-2 py-1 bg-bg"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] uppercase tracking-wide text-text-tertiary">End</label>
+            <input
+              type="datetime-local"
+              value={(params.endTime as string)?.slice(0, 16) ?? ""}
+              onChange={(e) => set("endTime", new Date(e.target.value).toISOString())}
+              className="block w-full mt-0.5 text-sm border border-border rounded px-2 py-1 bg-bg"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-[11px] uppercase tracking-wide text-text-tertiary">Attendees (comma-separated emails)</label>
+          <input
+            type="text"
+            value={attendeesStr}
+            onChange={(e) => set("attendees", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
+            className="block w-full mt-0.5 text-sm border border-border rounded px-2 py-1 bg-bg"
+          />
+        </div>
+        <div>
+          <label className="text-[11px] uppercase tracking-wide text-text-tertiary">Description</label>
+          <textarea
+            value={(params.description as string) ?? ""}
+            onChange={(e) => set("description", e.target.value)}
+            rows={3}
+            className="block w-full mt-0.5 text-sm border border-border rounded px-2 py-1 bg-bg resize-none"
+          />
+        </div>
+      </div>
+    );
+  }
+
   // Generic JSON fallback for kinds without a custom editor (Phase 3 wires more)
   return (
     <div className="mt-3 border border-border rounded-md p-3 bg-bg-secondary">

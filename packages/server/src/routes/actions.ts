@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import type { CrmContext } from "../context.js";
+import { getGmailClient, getCalendarClient } from "../google-client.js";
 
 /**
  * Actions Queue routes — list & execute approved agent actions.
@@ -214,7 +215,64 @@ async function executeAction(
       return { ok: true, detail: { activityId: id } };
     }
 
-    // Phase 3 will add: reply, schedule_meeting, update_stage, send_calendar_invite
+    case "reply": {
+      // Reply to a Gmail thread via the inbox item the agent referenced.
+      // params: { kind: "reply", inboxItemId, body }
+      const { inboxItemId, body } = params as { inboxItemId?: string; body?: string };
+      if (!inboxItemId) return { ok: false, error: "reply requires `inboxItemId`" };
+      if (!body?.trim()) return { ok: false, error: "reply requires non-empty `body`" };
+
+      const itemRows = await ctx.db.execute(sql`
+        SELECT source, source_id, subject, "from", metadata
+        FROM inbox_items
+        WHERE id = ${inboxItemId} AND tenant_id = ${tenantId}
+        LIMIT 1
+      `) as unknown as Array<{ source: string; source_id: string; subject: string; from: string; metadata: Record<string, unknown> | null }>;
+      const item = itemRows[0];
+      if (!item) return { ok: false, error: "inbox item not found" };
+      if (item.source !== "gmail") return { ok: false, error: "reply only supported for gmail items" };
+
+      const cli = await getGmailClient(ctx.db, tenantId);
+      if (!cli.gmail) return { ok: false, error: cli.error };
+
+      const toEmail = item.from.match(/<([^>]+)>/)?.[1] ?? item.from;
+      const threadId = (item.metadata?.threadId as string) ?? "";
+
+      const r = await cli.gmail.executeAction("reply_email", {
+        messageId: item.source_id,
+        threadId,
+        to: toEmail,
+        subject: item.subject ?? "",
+        body,
+      });
+      if (!r.success) return { ok: false, error: r.error ?? "Gmail reply failed" };
+      return { ok: true, detail: { messageId: r.data?.id } };
+    }
+
+    case "schedule_meeting": {
+      // params: { kind: "schedule_meeting", summary, startTime, endTime, attendees?, description?, timeZone? }
+      const { summary, startTime, endTime, attendees, description, timeZone } = params as {
+        summary?: string; startTime?: string; endTime?: string;
+        attendees?: string[]; description?: string; timeZone?: string;
+      };
+      if (!summary || !startTime || !endTime) {
+        return { ok: false, error: "schedule_meeting requires summary, startTime, endTime" };
+      }
+
+      const cli = await getCalendarClient(ctx.db, tenantId);
+      if (!cli.calendar) return { ok: false, error: cli.error };
+
+      const r = await cli.calendar.executeAction("create_event", {
+        summary, startTime, endTime,
+        description: description ?? "",
+        attendees: attendees ?? [],
+        timeZone: timeZone ?? "UTC",
+      });
+      if (!r.success) return { ok: false, error: r.error ?? "Calendar create_event failed" };
+      return { ok: true, detail: r.data };
+    }
+
+    // Phase 4+ may add: update_stage, send_calendar_invite, nudge, add_to_list
 
     default:
       return { ok: false, error: `Unknown action kind: ${kind ?? "(missing)"}` };
@@ -236,5 +294,9 @@ curl -s -X POST ${url}/api/crm/actions/ID/complete -H "X-Tenant-Id: ${tid}"
 curl -s -X POST ${url}/api/crm/actions/ID/execute  -H "X-Tenant-Id: ${tid}" -H "Content-Type: application/json" -d '{}'
 \`\`\`
 
-**To CREATE an action (the normal agent path):** use \`POST /api/agent/tasks\` (framework callback) with \`originKind: "agent_action"\`, \`assigneeUserId\`, \`parentId\`, and \`proposedParams: { kind: "...", ... }\`. The supported kinds in Phase 1: \`log_activity\` (params: type, subject, body, contactId/dealId/companyId, occurredAt). Phase 3 will add reply / schedule_meeting / update_stage.`;
+**To CREATE an action (the normal agent path):** use \`POST /api/agent/tasks\` (framework callback) with \`originKind: "agent_action"\`, \`assigneeUserId\`, \`parentId\`, and \`proposedParams: { kind: "...", ... }\`. Supported kinds:
+
+- \`log_activity\` — params: \`{ type: "note|call|email|meeting|task", subject, body?, contactId?, dealId?, companyId?, occurredAt? }\`
+- \`reply\` — Gmail thread reply. Params: \`{ inboxItemId, body }\`. Resolves recipient from the inbox item.
+- \`schedule_meeting\` — Google Calendar event. Params: \`{ summary, startTime (ISO 8601), endTime (ISO 8601), attendees?: string[], description?, timeZone? }\``;
 }
