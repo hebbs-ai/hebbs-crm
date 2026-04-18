@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useTasks, useCreateTask } from "../hooks/useTasks";
+import { useTasks, useCreateTask, useAssignTask } from "../hooks/useTasks";
+import { useAgents } from "../hooks/useAgents";
+import { useTeamUsers } from "../hooks/useTeam";
 import { Modal } from "../components/ui/Modal";
 import { PageHeader } from "../components/ui/PageHeader";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Badge } from "../components/ui/Badge";
 import { Input, Select, Textarea } from "../components/ui/FormField";
+import { AssigneePicker, type AssigneeValue } from "../components/AssigneePicker";
 
-type StatusFilter = "" | "todo" | "in_progress" | "done" | "blocked";
+type StatusFilter = "" | "todo" | "in_progress" | "done" | "blocked" | "unassigned";
 
 const PRIORITY_COLORS: Record<string, "red" | "orange" | "yellow" | "gray"> = {
   urgent: "red",
@@ -27,16 +30,24 @@ function formatStatus(s: string): string {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+interface NewTaskSubmitData {
+  title: string;
+  description?: string;
+  priority?: string;
+  assignee: AssigneeValue;
+}
+
 function NewTaskForm({
   onSubmit,
   onCancel,
   loading,
 }: {
-  onSubmit: (data: { title: string; description?: string; priority?: string }) => void;
+  onSubmit: (data: NewTaskSubmitData) => void;
   onCancel: () => void;
   loading: boolean;
 }) {
   const [form, setForm] = useState({ title: "", description: "", priority: "medium" });
+  const [assignee, setAssignee] = useState<AssigneeValue>({ kind: "unassigned" });
   const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -45,8 +56,11 @@ function NewTaskForm({
       title: form.title,
       description: form.description || undefined,
       priority: form.priority,
+      assignee,
     });
   };
+
+  const runLabel = assignee.kind === "agent" ? "Create & Run" : "Create Task";
 
   return (
     <form onSubmit={handleSubmit}>
@@ -74,6 +88,14 @@ function NewTaskForm({
         ]}
         className="mt-3"
       />
+      <AssigneePicker
+        value={assignee}
+        onChange={setAssignee}
+        className="mt-3"
+      />
+      {assignee.kind === "agent" && (
+        <p className="mt-1 text-[11px] text-text-tertiary">Agent will wake and start work on submit.</p>
+      )}
       <div className="mt-5 flex justify-end gap-2">
         <button
           type="button"
@@ -87,7 +109,7 @@ function NewTaskForm({
           disabled={loading || !form.title.trim()}
           className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
         >
-          {loading ? "Creating..." : "Create Task"}
+          {loading ? "Creating..." : runLabel}
         </button>
       </div>
     </form>
@@ -100,15 +122,23 @@ export function TasksPage() {
   const [showSystem, setShowSystem] = useState(false);
 
   const { data, isLoading } = useTasks(
-    statusFilter ? { status: statusFilter } : undefined,
+    statusFilter && statusFilter !== "unassigned" ? { status: statusFilter } : undefined,
   );
   const createTask = useCreateTask();
+  const assignTask = useAssignTask();
+  const { data: agents } = useAgents();
+  const { data: usersResp } = useTeamUsers();
+  const agentMap = new Map((agents ?? []).map((a) => [a.id, a.name]));
+  const userMap = new Map((usersResp?.data ?? []).map((u) => [u.userId, u.name || u.email]));
 
   const allTasks = data?.data ?? [];
   const userTasks = allTasks.filter(
     (t) => !(t as any).originKind || (t as any).originKind === "manual",
   );
-  const tasks = showSystem ? allTasks : userTasks;
+  const baseTasks = showSystem ? allTasks : userTasks;
+  const tasks = statusFilter === "unassigned"
+    ? baseTasks.filter((t) => !t.assigneeAgentId && !t.assigneeUserId)
+    : baseTasks;
   const systemCount = allTasks.length - userTasks.length;
 
   const filters: { label: string; value: StatusFilter }[] = [
@@ -116,7 +146,30 @@ export function TasksPage() {
     { label: "To Do", value: "todo" },
     { label: "In Progress", value: "in_progress" },
     { label: "Done", value: "done" },
+    { label: "Unassigned", value: "unassigned" },
   ];
+
+  const handleCreate = async (data: NewTaskSubmitData) => {
+    const payload: Record<string, unknown> = {
+      title: data.title,
+      description: data.description,
+      priority: data.priority,
+    };
+    if (data.assignee.kind === "user") payload.assigneeUserId = data.assignee.userId;
+    if (data.assignee.kind === "unassigned") {
+      payload.assigneeUserId = null;
+      payload.assigneeAgentId = null;
+    }
+
+    const res = await createTask.mutateAsync(payload as any);
+    const created = (res as any)?.data ?? res;
+    const taskId = created?.id;
+
+    if (data.assignee.kind === "agent" && taskId) {
+      await assignTask.mutateAsync({ taskId, agentId: data.assignee.agentId, wake: true });
+    }
+    setShowCreate(false);
+  };
 
   return (
     <div className="flex-1 overflow-y-auto p-8 pb-24 max-w-[1100px]">
@@ -225,11 +278,11 @@ export function TasksPage() {
                 </td>
                 <td className="px-3 py-2.5 border-b border-border text-sm text-text-secondary">
                   {t.assigneeAgentId ? (
-                    <Badge color="purple">Agent</Badge>
+                    <Badge color="purple">{agentMap.get(t.assigneeAgentId) ?? "Agent"}</Badge>
                   ) : t.assigneeUserId ? (
-                    t.assigneeUserId
+                    <Badge color="blue">{userMap.get(t.assigneeUserId) ?? "User"}</Badge>
                   ) : (
-                    "\u2014"
+                    <Badge color="gray">Unassigned</Badge>
                   )}
                 </td>
                 <td className="px-3 py-2.5 border-b border-border text-sm text-text-secondary">
@@ -243,11 +296,9 @@ export function TasksPage() {
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Task">
         <NewTaskForm
-          onSubmit={(data) => {
-            createTask.mutate(data, { onSuccess: () => setShowCreate(false) });
-          }}
+          onSubmit={handleCreate}
           onCancel={() => setShowCreate(false)}
-          loading={createTask.isPending}
+          loading={createTask.isPending || assignTask.isPending}
         />
       </Modal>
     </div>

@@ -2,9 +2,12 @@ import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useTask, useUpdateTask, usePostComment } from "../hooks/useTasks";
+import { useTask, useUpdateTask, usePostComment, useAssignTask } from "../hooks/useTasks";
+import { useAgents } from "../hooks/useAgents";
+import { useTeamUsers } from "../hooks/useTeam";
 import { PropertyRow } from "../components/ui/PropertyRow";
 import { Badge } from "../components/ui/Badge";
+import { AssigneePicker, type AssigneeValue } from "../components/AssigneePicker";
 
 function formatCost(usd: number): string {
   if (usd < 0.01) return `$${usd.toFixed(4)}`;
@@ -47,7 +50,10 @@ export function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data, isLoading } = useTask(id);
   const updateTask = useUpdateTask();
+  const assignTask = useAssignTask();
   const postComment = usePostComment();
+  const { data: agents } = useAgents();
+  const { data: usersResp } = useTeamUsers();
   const [commentBody, setCommentBody] = useState("");
 
   const task = data?.data;
@@ -61,6 +67,34 @@ export function TaskDetailPage() {
 
   const handleStatusChange = (newStatus: string) => {
     updateTask.mutate({ id: task.id, status: newStatus });
+  };
+
+  const currentAssignee: AssigneeValue = task.assigneeAgentId
+    ? { kind: "agent", agentId: task.assigneeAgentId }
+    : task.assigneeUserId
+    ? { kind: "user", userId: task.assigneeUserId }
+    : { kind: "unassigned" };
+
+  const isTerminal = task.status === "done" || task.status === "cancelled";
+
+  const sameAssignee = (a: AssigneeValue, b: AssigneeValue) => {
+    if (a.kind !== b.kind) return false;
+    if (a.kind === "agent" && b.kind === "agent") return a.agentId === b.agentId;
+    if (a.kind === "user" && b.kind === "user") return a.userId === b.userId;
+    return true;
+  };
+
+  const handleAssigneeChange = async (next: AssigneeValue) => {
+    if (sameAssignee(next, currentAssignee)) return;
+    if (next.kind === "agent") {
+      await assignTask.mutateAsync({ taskId: task.id, agentId: next.agentId, wake: !isTerminal });
+      return;
+    }
+    await updateTask.mutateAsync({
+      id: task.id,
+      assigneeAgentId: null as any,
+      assigneeUserId: (next.kind === "user" ? next.userId : null) as any,
+    });
   };
 
   const handlePostComment = (e: React.FormEvent) => {
@@ -198,12 +232,13 @@ export function TaskDetailPage() {
               )}
             </PropertyRow>
             <PropertyRow label="Assignee">
-              {task.assigneeAgentId ? (
-                <Badge color="purple">Agent</Badge>
-              ) : task.assigneeUserId ? (
-                task.assigneeUserId
-              ) : (
-                "\u2014"
+              <AssigneePicker
+                label=""
+                value={currentAssignee}
+                onChange={handleAssigneeChange}
+              />
+              {currentAssignee.kind === "agent" && !isTerminal && (
+                <p className="mt-1 text-[11px] text-text-tertiary">Agent wakes on assign.</p>
               )}
             </PropertyRow>
             <PropertyRow label="Created">

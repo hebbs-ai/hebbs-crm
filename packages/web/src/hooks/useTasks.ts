@@ -176,6 +176,27 @@ export function usePostComment() {
   });
 }
 
+interface AssignInput {
+  taskId: string;
+  agentId: string;
+  wake?: boolean;
+}
+
+export function useAssignTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, agentId, wake }: AssignInput) =>
+      taskFetch<Record<string, unknown>>(`/${taskId}/assign`, {
+        method: "POST",
+        body: JSON.stringify({ agentId, wake: wake ?? false }),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["tasks", variables.taskId] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}
+
 export function useDeleteTask() {
   const qc = useQueryClient();
   return useMutation({
