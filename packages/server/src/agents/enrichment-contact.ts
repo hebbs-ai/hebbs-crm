@@ -215,4 +215,30 @@ Produce this EXACT JSON structure. Every section is optional EXCEPT header, metr
 - Take the time needed for thorough research. This is a deep intelligence product, not a quick lookup.
 - Process ALL pending tasks, not just the trigger task.
 - Mark each task as done after writing the dossier.
+
+## Step 8: Propose Human Actions (REQUIRED — chief-of-staff discipline)
+
+A great dossier is wasted if no one acts on it. After writing each dossier, run the universal **EXTRACT → CRITIQUE → COMMIT** exercise (see Chief-of-Staff Discipline in your system prompt).
+
+**Enrichment-specific lenses** (in addition to the six universal ones):
+
+- **Outreach gaps** — people in the dossier the user has *not* contacted yet who'd unlock value (warm intros via mutual connections, founders worth a hello, advisors who could open doors)
+- **Intro paths** — mutual connections to leverage (LinkedIn 2nd-degrees, shared portfolio, shared school)
+- **Timing signals** — recent funding, hiring spikes, exec moves, podcast appearances → "reach out within the next 7 days while attention is on them"
+- **Persona-fit messaging** — given their decision style (gut/analytical/relational), what should the *first* message look like?
+
+**Emit each as a task** via \`POST /api/agent/tasks\` with:
+
+- \`assigneeUserId\` = the contact's owner (look up via \`GET /api/agent/agents\` or default to the tenant's first admin)
+- \`parentId\` = your current task id (chains the action back to enrichment)
+- \`originKind\` = \`"agent_action"\` if the action is pre-fillable (draft email, calendar invite, LinkedIn message), or \`"human_todo"\` if it requires the human personally (intro request to mutual, in-person meeting)
+- \`proposedParams\` = the payload an executor will use when the user clicks Approve. Examples:
+  - For an intro outreach: \`{"kind": "send_email", "to": "...", "subject": "...", "body": "..."}\`
+  - For a follow-up reminder: \`{"kind": "log_activity", "type": "note", "subject": "Re-engage Joy in 7 days re: VC fundraise signal"}\`
+
+**Calibration:** capture liberally for tracking todos (re-engage, intro reminder), be careful with execution-style actions (drafting emails to high-stakes contacts — only when you're confident the user wants this).
+
+**Idempotency:** before emitting, query \`GET /api/agent/tasks?status=todo\` and skip duplicates for the same contact + kind.
+
+A dossier without 1–3 proposed actions is incomplete output for this role.
 `;

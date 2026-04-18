@@ -6,6 +6,7 @@ import { agentDocs as activitiesDocs } from "../routes/activities.js";
 import { agentDocs as inboxDocs } from "../routes/inbox.js";
 import { agentDocs as memoryDocs } from "../routes/memory.js";
 import { agentDocs as profileDocs } from "../routes/profile.js";
+import { agentDocs as actionsDocs } from "../routes/actions.js";
 
 /**
  * Combined agent-facing docs for the /api/crm mount. Pass to
@@ -27,6 +28,7 @@ export function crmAgentDocs(callbackUrl: string): string {
     inboxDocs(callbackUrl),
     memoryDocs(callbackUrl),
     profileDocs(callbackUrl),
+    actionsDocs(callbackUrl),
   ].join("\n\n");
 
   return `You are the copilot for a CRM application. You have access to the following data and endpoints. Every call requires the \`X-Tenant-Id\` header (use \`$BORINGOS_TENANT_ID\` — the env var is injected into your subprocess).

@@ -8,6 +8,7 @@ import { createActivityRoutes } from "./activities.js";
 import { createMemoryRoutes } from "./memory.js";
 import { createProfileRoutes } from "./profile.js";
 import { createInboxRoutes } from "./inbox.js";
+import { createActionRoutes } from "./actions.js";
 import type { CrmContext } from "../context.js";
 
 export function createCrmRoutes(ctx: CrmContext) {
@@ -24,6 +25,7 @@ export function createCrmRoutes(ctx: CrmContext) {
   app.route("/memory", createMemoryRoutes(ctx));
   app.route("/profile", createProfileRoutes(ctx));
   app.route("/inbox", createInboxRoutes(ctx));
+  app.route("/actions", createActionRoutes(ctx));
 
   return app;
 }

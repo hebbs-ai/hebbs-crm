@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../lib/auth";
+import { useActionCount } from "../hooks/useActions";
 
 const NAV_ITEMS = [
   { to: "/brief", label: "Morning Brief", icon: "\u2600" },
@@ -9,6 +10,7 @@ const NAV_ITEMS = [
   { to: "/contacts", label: "Contacts", icon: "\u2636" },
   { to: "/companies", label: "Companies", icon: "\u2302" },
   { to: "/inbox", label: "Inbox", icon: "\u2709" },
+  { to: "/actions", label: "Actions", icon: "\u2192", badge: "actionCount" as const },
   { to: "/tasks", label: "Tasks", icon: "\u2611" },
   { to: "/copilot", label: "Copilot", icon: "\u25C7" },
   { to: "/knowledge", label: "Knowledge Base", icon: "\u2261" },
@@ -21,8 +23,12 @@ const TOOL_ITEMS = [
 export function Sidebar() {
   const { user, logout, switchTenant } = useAuth();
   const [showTenantMenu, setShowTenantMenu] = useState(false);
+  const { data: actionCount } = useActionCount();
 
   const hasMultipleTenants = (user?.tenants?.length ?? 0) > 1;
+  const badges: Record<string, number> = {
+    actionCount: actionCount?.pending ?? 0,
+  };
 
   return (
     <aside className="w-[248px] bg-bg-secondary border-r border-border p-2 flex flex-col shrink-0 overflow-y-auto">
@@ -69,7 +75,12 @@ export function Sidebar() {
             }
           >
             <span className="w-[18px] text-center text-[15px] shrink-0">{item.icon}</span>
-            {item.label}
+            <span className="flex-1">{item.label}</span>
+            {"badge" in item && item.badge && badges[item.badge] > 0 && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-accent text-white">
+                {badges[item.badge]}
+              </span>
+            )}
           </NavLink>
         ))}
 

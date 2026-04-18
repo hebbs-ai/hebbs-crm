@@ -15,6 +15,7 @@ import { TaskDetailPage } from "./pages/TaskDetail";
 import { SettingsPage } from "./pages/Settings";
 import { KnowledgeBasePage } from "./pages/KnowledgeBase";
 import { InboxPage } from "./pages/Inbox";
+import { ActionsPage } from "./pages/Actions";
 import { LoginPage } from "./pages/Login";
 import { SignupPage } from "./pages/Signup";
 import type { ReactNode } from "react";
@@ -68,6 +69,7 @@ function AppRoutes() {
         <Route path="copilot" element={<CopilotPage />} />
         <Route path="copilot/:sessionId" element={<CopilotPage />} />
         <Route path="inbox" element={<InboxPage />} />
+        <Route path="actions" element={<ActionsPage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="tasks/:id" element={<TaskDetailPage />} />
         <Route path="knowledge" element={<KnowledgeBasePage />} />
