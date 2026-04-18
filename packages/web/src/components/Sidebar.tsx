@@ -17,7 +17,7 @@ const NAV_ITEMS = [
 ];
 
 const TOOL_ITEMS = [
-  { to: "/agents", label: "Agents", icon: "\u26A1" },
+  { to: "/agents", label: "Agents", icon: "\u2042" },
   { to: "/settings", label: "Settings", icon: "\u2699" },
 ];
 
