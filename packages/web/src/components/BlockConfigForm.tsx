@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import type { WorkflowBlock } from "../hooks/useWorkflows";
+import { useWorkflows } from "../hooks/useWorkflows";
 
 /**
  * Per-kind config editor for a selected block. Each block type has a
@@ -66,6 +67,7 @@ function TypeSpecific({ block, onChange, agents }: { block: WorkflowBlock; onCha
     case "wait-for-human":    return <WaitForHumanForm block={block} onChange={onChange} />;
     case "emit-event":        return <EmitEventForm block={block} onChange={onChange} />;
     case "create-inbox-item": return <CreateInboxItemForm block={block} onChange={onChange} />;
+    case "invoke-workflow":   return <InvokeWorkflowForm block={block} onChange={onChange} />;
     case "transform":         return <JSONFallbackForm block={block} onChange={onChange} />;
     default:                  return <JSONFallbackForm block={block} onChange={onChange} />;
   }
@@ -487,6 +489,33 @@ function EmitEventForm({ block, onChange }: { block: WorkflowBlock; onChange: Bl
       <FieldText label="Connector kind" value={(cfg.connectorKind as string) ?? ""} onChange={(v) => setField(block, "connectorKind", v, onChange)} mono />
       <FieldText label="Event type" help="e.g. inbox.item_created, custom.event" value={(cfg.eventType as string) ?? ""} onChange={(v) => setField(block, "eventType", v, onChange)} mono />
       <FieldJSON label="Data" value={cfg.data ?? {}} onChange={(v) => setField(block, "data", v, onChange)} rows={3} />
+    </>
+  );
+}
+
+function InvokeWorkflowForm({ block, onChange }: { block: WorkflowBlock; onChange: BlockConfigFormProps["onChange"] }) {
+  const cfg = block.config as { workflowId?: string; payload?: Record<string, unknown> | string; triggerType?: string };
+  // Load the workflow list once so the user can pick from a dropdown
+  // instead of pasting a UUID. We dedupe out the current workflow so
+  // users can't accidentally self-invoke (the engine also guards it).
+  const workflows = useWorkflows();
+  const options = (workflows.data?.workflows ?? []).map((w) => ({ value: w.id, label: `${w.name} (${w.id.slice(0, 8)})` }));
+  return (
+    <>
+      <label className="block">
+        <span className="block text-[11px] uppercase tracking-wide text-text-tertiary font-semibold mb-0.5">Workflow</span>
+        <select
+          value={(cfg.workflowId as string) ?? ""}
+          onChange={(e) => setField(block, "workflowId", e.target.value, onChange)}
+          className="w-full text-sm border border-border rounded px-2 py-1 bg-bg"
+        >
+          <option value="">— pick a workflow —</option>
+          {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <span className="block text-[10px] text-text-tertiary mt-0.5">The workflow to run as a sub-routine. Its block outputs are merged into this block's output.</span>
+      </label>
+      <FieldText label="Trigger type" help="Defaults to 'manual'. Use 'event' / 'cron' etc. to match the child's trigger." value={(cfg.triggerType as string) ?? ""} onChange={(v) => setField(block, "triggerType", v, onChange)} mono />
+      <FieldJSON label="Payload" help="Trigger payload passed to the child. Template strings are resolved first." value={typeof cfg.payload === "object" && cfg.payload !== null ? cfg.payload as Record<string, unknown> : {}} onChange={(v) => setField(block, "payload", v, onChange)} rows={4} />
     </>
   );
 }

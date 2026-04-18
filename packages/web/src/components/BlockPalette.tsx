@@ -109,6 +109,17 @@ const PALETTE: Array<{ category: string; items: Array<{ type: string; label: str
       },
     ],
   },
+  {
+    category: "Composition",
+    items: [
+      {
+        type: "invoke-workflow",
+        label: "Invoke workflow",
+        description: "Run another workflow as a sub-routine and capture its output.",
+        defaults: () => ({ name: "invoke", type: "invoke-workflow", config: { workflowId: "", payload: {} } }),
+      },
+    ],
+  },
 ];
 
 export interface BlockPaletteProps {
