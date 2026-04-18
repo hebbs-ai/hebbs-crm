@@ -126,20 +126,37 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
     `);
   }
 
-  // 5. Create Email Triage agent
-  // Framework already created copilot + runtimes. We create additional CRM agents.
+  // 5. Create Email Triage agent + event-triggered workflow that wakes it
   try {
     const { EMAIL_TRIAGE_INSTRUCTIONS } = await import("./agents/email-triage.js");
-    // Find the Claude runtime for this tenant
     const rtResult = await db.execute(sql`
       SELECT id FROM runtimes WHERE tenant_id = ${tenantId} AND type = 'claude' LIMIT 1
     `);
     const runtimeId = (rtResult as unknown as Array<{ id: string }>)[0]?.id;
     if (runtimeId) {
+      const emailTriageAgentId = randomUUID();
       await db.execute(sql`
         INSERT INTO agents (id, tenant_id, name, role, status, instructions, runtime_id, created_at, updated_at)
-        VALUES (${randomUUID()}, ${tenantId}, 'Email Triage', 'email-triage', 'idle',
+        VALUES (${emailTriageAgentId}, ${tenantId}, 'Email Triage', 'email-triage', 'idle',
           ${EMAIL_TRIAGE_INSTRUCTIONS}, ${runtimeId}, now(), now())
+      `);
+
+      // Replaces the previous inline `app.onEvent("inbox.item_created")` hand-
+      // rolled dispatch. The framework's event-dispatch primitive picks up
+      // any active workflow whose trigger.eventType matches the incoming
+      // event and executes it with the event payload. One wake per batch —
+      // the agent's wake-coalescing keeps things from piling up.
+      const triageWfBlocks = [
+        { id: "trigger", name: "trigger", type: "trigger", config: { eventType: "inbox.item_created" } },
+        { id: "wake", name: "wake", type: "wake-agent", config: { agentId: emailTriageAgentId, reason: "inbox_item_created" } },
+      ];
+      const triageWfEdges = [
+        { id: "e1", sourceBlockId: "trigger", targetBlockId: "wake", sourceHandle: null, sortOrder: 0 },
+      ];
+      await db.execute(sql`
+        INSERT INTO workflows (id, tenant_id, name, type, status, blocks, edges, created_at, updated_at)
+        VALUES (${randomUUID()}, ${tenantId}, 'Triage new inbox items', 'system', 'active',
+          ${JSON.stringify(triageWfBlocks)}::jsonb, ${JSON.stringify(triageWfEdges)}::jsonb, now(), now())
       `);
     }
   } catch (err) {
