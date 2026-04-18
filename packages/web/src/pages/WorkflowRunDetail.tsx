@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { useWorkflowRun, useWorkflow } from "../hooks/useWorkflows";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { useWorkflowRun, useWorkflow, useReplayRun } from "../hooks/useWorkflows";
 import type { BlockRun, BlockRunStatus } from "../hooks/useWorkflows";
 import { WorkflowCanvas } from "../components/WorkflowCanvas";
 
@@ -88,15 +88,26 @@ function BlockRunCard({ block, forceOpen }: { block: BlockRun; forceOpen?: boole
 
 export function WorkflowRunDetailPage() {
   const { id, runId } = useParams<{ id: string; runId: string }>();
+  const navigate = useNavigate();
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const { data, isLoading } = useWorkflowRun(runId);
   const wf = useWorkflow(id);
+  const replay = useReplayRun();
 
   if (isLoading) return <div className="p-6 text-sm text-text-secondary">Loading…</div>;
   if (!data) return <div className="p-6 text-sm text-text-secondary">Run not found</div>;
 
   const { run, blocks } = data;
   const selectedBlock = selectedBlockId ? blocks.find((b) => b.blockId === selectedBlockId) : null;
+  // Replay is only useful once a run has reached a terminal state. Running /
+  // queued runs have nothing meaningful to replay yet.
+  const canReplay = run.status === "completed" || run.status === "failed" || run.status === "cancelled";
+
+  async function handleReplay() {
+    if (!runId) return;
+    const res = await replay.mutateAsync(runId);
+    navigate(`/workflows/${id}/runs/${res.runId}`);
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -105,20 +116,32 @@ export function WorkflowRunDetailPage() {
           <Link to={`/workflows/${id}`} className="text-sm text-text-secondary hover:text-text-primary">{"\u2190"} Back to workflow</Link>
         </div>
 
-        <header className="mb-6">
-          <h1 className="text-xl font-semibold text-text-primary font-mono">Run {run.id.slice(0, 8)}</h1>
-          <div className="flex items-center gap-3 mt-1 text-xs text-text-secondary">
-            <span className={`uppercase tracking-wide font-semibold ${run.status === "completed" ? "text-text-green" : run.status === "failed" ? "text-text-red" : run.status === "waiting_for_human" ? "text-text-purple" : "text-text-amber"}`}>
-              {run.status.replace("_", " ")}
-            </span>
-            <span>·</span>
-            <span>{run.triggerType}</span>
-            <span>·</span>
-            <span>{formatDuration(run.durationMs)}</span>
-            <span>·</span>
-            <span>{run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</span>
+        <header className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold text-text-primary font-mono">Run {run.id.slice(0, 8)}</h1>
+            <div className="flex items-center gap-3 mt-1 text-xs text-text-secondary">
+              <span className={`uppercase tracking-wide font-semibold ${run.status === "completed" ? "text-text-green" : run.status === "failed" ? "text-text-red" : run.status === "waiting_for_human" ? "text-text-purple" : "text-text-amber"}`}>
+                {run.status.replace("_", " ")}
+              </span>
+              <span>·</span>
+              <span>{run.triggerType}</span>
+              <span>·</span>
+              <span>{formatDuration(run.durationMs)}</span>
+              <span>·</span>
+              <span>{run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</span>
+            </div>
+            {run.error && <div className="mt-2 text-sm text-text-red">{run.error}</div>}
           </div>
-          {run.error && <div className="mt-2 text-sm text-text-red">{run.error}</div>}
+          {canReplay && (
+            <button
+              onClick={handleReplay}
+              disabled={replay.isPending}
+              className="text-xs font-medium px-3 py-1.5 rounded border border-border hover:bg-bg-hover text-text-primary disabled:opacity-50"
+              title="Re-execute this workflow with the same trigger payload"
+            >
+              {replay.isPending ? "Replaying…" : "\u21BB Replay"}
+            </button>
+          )}
         </header>
 
         {/* Visual DAG with per-block status overlaid. Click a node to jump to its detail. */}

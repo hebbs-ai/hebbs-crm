@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { useWorkflow, useWorkflowRuns, useExecuteWorkflow, useUpdateWorkflowStatus } from "../hooks/useWorkflows";
 import type { WorkflowRunStatus } from "../hooks/useWorkflows";
 import { WorkflowCanvas } from "../components/WorkflowCanvas";
+import { RunDiffView } from "../components/RunDiffView";
 
 function runStatusColor(status: WorkflowRunStatus): string {
   return status === "completed" ? "text-text-green"
@@ -72,6 +73,11 @@ function DefinitionView({
 export function WorkflowDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [tab, setTab] = useState<"runs" | "definition">("runs");
+  // Compare mode state: when `compareMode` is on, clicks on run rows toggle
+  // selection instead of navigating. `compareSelected` holds up to 2 run IDs;
+  // when it reaches 2 we render the diff view below the list.
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareSelected, setCompareSelected] = useState<string[]>([]);
 
   const wf = useWorkflow(id);
   const runs = useWorkflowRuns(id);
@@ -160,31 +166,102 @@ export function WorkflowDetailPage() {
         </div>
 
         {tab === "runs" && (
-          <div className="space-y-1">
-            {runs.isLoading && <div className="text-sm text-text-secondary">Loading…</div>}
-            {!runs.isLoading && runList.length === 0 && (
-              <div className="text-center py-12 text-sm text-text-tertiary">No runs yet. Hit "Run now" to trigger one.</div>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-text-tertiary">
+                {compareMode
+                  ? compareSelected.length === 2
+                    ? "Two runs selected — diff shown below."
+                    : `Pick ${2 - compareSelected.length} more run${compareSelected.length === 1 ? "" : "s"} to diff.`
+                  : null}
+              </div>
+              <div className="flex items-center gap-2">
+                {compareMode && compareSelected.length > 0 && (
+                  <button
+                    onClick={() => setCompareSelected([])}
+                    className="text-xs text-text-tertiary hover:text-text-primary"
+                  >
+                    Clear selection
+                  </button>
+                )}
+                <button
+                  onClick={() => { setCompareMode(!compareMode); setCompareSelected([]); }}
+                  className={`text-xs px-2.5 py-1 rounded border ${compareMode ? "border-accent text-accent" : "border-border text-text-secondary hover:bg-bg-hover"}`}
+                >
+                  {compareMode ? "Exit compare" : "Compare runs"}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              {runs.isLoading && <div className="text-sm text-text-secondary">Loading…</div>}
+              {!runs.isLoading && runList.length === 0 && (
+                <div className="text-center py-12 text-sm text-text-tertiary">No runs yet. Hit "Run now" to trigger one.</div>
+              )}
+              {runList.map((r) => {
+                const isSelected = compareSelected.includes(r.id);
+                const rowInner = (
+                  <>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {compareMode && (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {}}
+                          className="shrink-0"
+                        />
+                      )}
+                      <span className={`text-[10px] uppercase tracking-wide font-semibold ${runStatusColor(r.status)}`}>
+                        {r.status}
+                      </span>
+                      <span className="font-mono text-xs text-text-tertiary">{r.id.slice(0, 8)}</span>
+                      <span className="text-xs text-text-tertiary">{r.triggerType}</span>
+                      {r.error && <span className="text-xs text-text-red truncate">· {r.error.slice(0, 80)}</span>}
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 text-xs text-text-tertiary">
+                      <span>{formatDuration(r.durationMs)}</span>
+                      <span>{formatRelative(r.startedAt)}</span>
+                    </div>
+                  </>
+                );
+                const rowClass = `flex items-center justify-between gap-3 px-3 py-2 rounded-md border transition-colors ${
+                  isSelected ? "border-accent bg-bg-secondary" : "border-transparent hover:border-border hover:bg-bg-hover"
+                }`;
+
+                if (compareMode) {
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => {
+                        setCompareSelected((prev) => {
+                          if (prev.includes(r.id)) return prev.filter((x) => x !== r.id);
+                          if (prev.length >= 2) return [prev[1], r.id]; // keep newest 2
+                          return [...prev, r.id];
+                        });
+                      }}
+                      className={`${rowClass} w-full text-left`}
+                    >
+                      {rowInner}
+                    </button>
+                  );
+                }
+                return (
+                  <Link key={r.id} to={`/workflows/${workflow.id}/runs/${r.id}`} className={rowClass}>
+                    {rowInner}
+                  </Link>
+                );
+              })}
+            </div>
+
+            {compareMode && compareSelected.length === 2 && (
+              <div className="mt-4">
+                <RunDiffView
+                  runIdA={compareSelected[0]}
+                  runIdB={compareSelected[1]}
+                  onClose={() => setCompareSelected([])}
+                />
+              </div>
             )}
-            {runList.map((r) => (
-              <Link
-                key={r.id}
-                to={`/workflows/${workflow.id}/runs/${r.id}`}
-                className="flex items-center justify-between gap-3 px-3 py-2 rounded-md hover:bg-bg-hover border border-transparent hover:border-border transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <span className={`text-[10px] uppercase tracking-wide font-semibold ${runStatusColor(r.status)}`}>
-                    {r.status}
-                  </span>
-                  <span className="font-mono text-xs text-text-tertiary">{r.id.slice(0, 8)}</span>
-                  <span className="text-xs text-text-tertiary">{r.triggerType}</span>
-                  {r.error && <span className="text-xs text-text-red truncate">· {r.error.slice(0, 80)}</span>}
-                </div>
-                <div className="flex items-center gap-3 shrink-0 text-xs text-text-tertiary">
-                  <span>{formatDuration(r.durationMs)}</span>
-                  <span>{formatRelative(r.startedAt)}</span>
-                </div>
-              </Link>
-            ))}
           </div>
         )}
 

@@ -238,6 +238,27 @@ export function useCreateWorkflow() {
   });
 }
 
+/**
+ * Replay a past run. Re-executes the workflow (at its *current* definition)
+ * using the original run's triggerPayload. Useful for reproducing scenarios
+ * while debugging — fix a block, replay the failing run, check if it passes.
+ */
+export function useReplayRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) =>
+      admin<{ runId: string; status: string; error?: string; replayedFromRunId: string }>(
+        `/workflow-runs/${runId}/replay`,
+        { method: "POST" },
+      ),
+    onSuccess: (data) => {
+      // Invalidate any run list that might include the new run.
+      qc.invalidateQueries({ queryKey: ["workflows"] });
+      qc.invalidateQueries({ queryKey: ["workflow-runs", data.runId] });
+    },
+  });
+}
+
 /** Lookup agents for use in WakeAgent config dropdown */
 export function useAgentsForWorkflow() {
   return useQuery({
