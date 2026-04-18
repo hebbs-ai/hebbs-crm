@@ -47,6 +47,68 @@ This returns \`{ threadMessages: [...] }\` — an array of all messages in the e
 7. **Classify**: lead, reply, internal, newsletter, spam
 8. **Draft a suggested response** if the email is actionable (score >= 50). Use thread context to make the draft relevant — reference prior discussion points.
 9. **Auto-archive** if score < 20 (newsletters, spam)
+10. **Emit Action(s) for the user** — REQUIRED for any item with score >= 50. See "Step 10: Emit Actions" section below for the exact callback. This is what makes the analysis useful — the user doesn't need to find your draft, they just see a card to approve. **Do not skip this step.**
+
+## Step 10: Emit Actions (REQUIRED for score >= 50)
+
+After PATCHing the inbox item analysis, **always** emit at least one task via \`POST /api/agent/tasks\` so the user sees something to act on in the Actions queue. This is part of every iteration of the per-item loop, not a separate end-of-run step.
+
+**Choose the kind based on what you drafted:**
+
+- **You drafted a reply** (score >= 50, classification "reply" or "lead", not a meeting ask)
+  → Emit \`agent_action\` with kind="reply" so the user can one-click send your draft.
+
+  \`\`\`
+  curl -X POST $BORINGOS_CALLBACK_URL/api/agent/tasks \\
+    -H "Authorization: Bearer $BORINGOS_CALLBACK_TOKEN" \\
+    -H "Content-Type: application/json" \\
+    -d '{
+      "title": "Reply to <sender first name>: <one-line gist of their ask>",
+      "description": "<one-line WHY — score, deadline, deal context>",
+      "originKind": "agent_action",
+      "assigneeUserId": "<the inbox item assigneeUserId, or first admin user>",
+      "proposedParams": {
+        "kind": "reply",
+        "inboxItemId": "<INBOX ITEM ID>",
+        "body": "<your full draft response — exactly what should send>"
+      }
+    }'
+  \`\`\`
+
+- **The email proposes a meeting / asks for time** (e.g., "want to chat?", "let me know what works")
+  → Emit \`agent_action\` with kind="schedule_meeting" with reasonable defaults.
+
+  \`\`\`
+  proposedParams: {
+    "kind": "schedule_meeting",
+    "summary": "<purpose> — <Sender Name>",
+    "startTime": "<ISO 8601 — propose a slot ~3 business days out>",
+    "endTime": "<startTime + 30 minutes>",
+    "attendees": ["<sender email>"],
+    "description": "<context, link to thread>"
+  }
+  \`\`\`
+
+- **The email mentions an in-person task, deadline-only reminder, or anything you cannot draft for them** (e.g., "see you Wednesday at our office", "bring laptop", "review the deck before Friday")
+  → Emit \`human_todo\` (no proposedParams).
+
+  \`\`\`
+  {
+    "title": "Prepare for in-person meeting with Sarah Wed 2pm",
+    "description": "She mentioned bringing laptop + printed proposal",
+    "originKind": "human_todo",
+    "assigneeUserId": "<user>"
+  }
+  \`\`\`
+
+- **You're unsure whether to reply at all (sensitive customer escalation, legal, executive thread)**
+  → Emit \`agent_blocked\` and ask for direction in the title/description. The user replies via the comment thread to unblock you.
+
+**Multiple actions per email is normal and encouraged.** A single email might warrant: one reply (agent_action), one calendar slot proposal (agent_action), and one in-person reminder (human_todo) — three tasks from one email.
+
+**Idempotency:** before emitting, check if you already proposed an action for this inbox item — query \`GET /api/agent/tasks?status=todo\` and skip if you find a pending task referencing this inboxItemId in proposedParams.
+
+**A high-score (>= 50) email without ANY emitted task is incomplete output for this role.**
 
 ## How to Write Results
 
@@ -94,6 +156,7 @@ curl $BORINGOS_CALLBACK_URL/api/crm/deals \\
 - Process ALL items listed in your task description
 - Be fast — don't over-research, quick analysis is fine
 - Always write results back via PATCH, even for low-score items
+- **Always emit Action(s) (Step 10) for any score >= 50 — this is non-negotiable**
 - The user sees your analysis in the inbox UI — keep summaries concise (1-2 sentences)
 - Draft responses should be professional but match a casual sales tone
 
