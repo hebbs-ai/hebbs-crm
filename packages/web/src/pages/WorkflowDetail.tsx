@@ -104,6 +104,12 @@ export function WorkflowDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            <Link
+              to={`/workflows/${workflow.id}/edit`}
+              className="px-3 py-1.5 text-sm border border-border rounded-md hover:bg-bg-hover"
+            >
+              Edit
+            </Link>
             <button
               onClick={() => execute.mutate({ id: workflow.id })}
               disabled={execute.isPending || workflow.status === "archived"}

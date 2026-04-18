@@ -161,3 +161,47 @@ export function useExecuteWorkflow() {
     },
   });
 }
+
+export function useUpdateWorkflow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<Pick<Workflow, "name" | "blocks" | "edges" | "status" | "governingAgentId">> }) =>
+      admin<Workflow>(`/workflows/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["workflows"] });
+      qc.invalidateQueries({ queryKey: ["workflows", vars.id] });
+    },
+  });
+}
+
+export function useCreateWorkflow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; blocks?: WorkflowBlock[]; edges?: WorkflowEdge[] }) =>
+      admin<Workflow>("/workflows", {
+        method: "POST",
+        body: JSON.stringify({
+          name: input.name,
+          blocks: input.blocks ?? [
+            { id: "trigger", name: "trigger", type: "trigger", config: {} },
+          ],
+          edges: input.edges ?? [],
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workflows"] });
+    },
+  });
+}
+
+/** Lookup agents for use in WakeAgent config dropdown */
+export function useAgentsForWorkflow() {
+  return useQuery({
+    queryKey: ["workflow-editor", "agents"],
+    queryFn: () => admin<{ agents: Array<{ id: string; name: string; role: string }> }>("/agents"),
+    staleTime: 60_000,
+  });
+}

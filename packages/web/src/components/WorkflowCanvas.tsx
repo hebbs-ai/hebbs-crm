@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState, useEffect } from "react";
 import {
   ReactFlow,
   Background,
@@ -9,6 +9,12 @@ import {
   type Node,
   type Edge,
   type NodeProps,
+  type OnNodesChange,
+  type OnEdgesChange,
+  type Connection,
+  applyNodeChanges,
+  applyEdgeChanges,
+  addEdge,
 } from "@xyflow/react";
 import dagre from "@dagrejs/dagre";
 import "@xyflow/react/dist/style.css";
@@ -203,22 +209,47 @@ export interface WorkflowCanvasProps {
   onBlockClick?: (blockId: string) => void;
   /** Height of the canvas in CSS. Defaults to 400px. */
   height?: number | string;
+  /**
+   * `"view"` (default) — read-only, used on detail/run pages.
+   * `"edit"` — nodes draggable, edges connectable, delete + backspace remove
+   * nodes/edges. In this mode, `onGraphChange` fires on any structural
+   * mutation (node added/moved/removed, edge added/removed) with the new
+   * blocks + edges arrays. Position of moved nodes is preserved in memory
+   * only — not currently persisted (workflow schema has no position field
+   * yet; auto-layout runs on load).
+   */
+  mode?: "view" | "edit";
+  onGraphChange?: (blocks: WorkflowBlock[], edges: WorkflowEdge[]) => void;
 }
 
 export function WorkflowCanvas({
-  blocks, edges, blockRuns, selectedBlockId, onBlockClick, height = 400,
+  blocks, edges, blockRuns, selectedBlockId, onBlockClick,
+  height = 400, mode = "view", onGraphChange,
 }: WorkflowCanvasProps) {
-  const { nodes, edges: rfEdges } = useMemo(() => autoLayout(blocks, edges), [blocks, edges]);
+  const laidOut = useMemo(() => autoLayout(blocks, edges), [blocks, edges]);
 
-  // Overlay runtime data on top of layout
+  // In edit mode we carry local node positions so dragging works; in view mode
+  // we re-derive from auto-layout every render.
+  const [editNodes, setEditNodes] = useState<Node<BlockNodeData>[]>(laidOut.nodes);
+  const [editEdges, setEditEdges] = useState<Edge[]>(laidOut.edges);
+
+  // When inputs change externally (palette adds a node, edit elsewhere), resync.
+  useEffect(() => {
+    setEditNodes(laidOut.nodes);
+    setEditEdges(laidOut.edges);
+  }, [laidOut.nodes, laidOut.edges]);
+
+  // Overlay runtime data on top of layout (only relevant in view mode with runs)
   const runById = useMemo(() => {
     const m = new Map<string, BlockRun>();
     for (const br of blockRuns ?? []) m.set(br.blockId, br);
     return m;
   }, [blockRuns]);
 
-  const enrichedNodes = useMemo<Node<BlockNodeData>[]>(() =>
-    nodes.map((n) => {
+  const baseNodes = mode === "edit" ? editNodes : laidOut.nodes;
+
+  const displayNodes = useMemo<Node<BlockNodeData>[]>(() =>
+    baseNodes.map((n) => {
       const run = runById.get(n.id);
       return {
         ...n,
@@ -230,22 +261,91 @@ export function WorkflowCanvas({
         },
       };
     }),
-  [nodes, runById, selectedBlockId]);
+  [baseNodes, runById, selectedBlockId]);
+
+  const displayEdges = mode === "edit" ? editEdges : laidOut.edges;
 
   const handleNodeClick = useCallback((_e: React.MouseEvent, node: Node) => {
     onBlockClick?.(node.id);
   }, [onBlockClick]);
 
+  // ── Edit-mode handlers ────────────────────────────────────────────────────
+
+  const emitChange = useCallback((nodes: Node[], edges: Edge[]) => {
+    // Project react-flow state back into blocks + edges
+    const newBlocks: WorkflowBlock[] = nodes.map((n) => {
+      const orig = blocks.find((b) => b.id === n.id);
+      return orig ?? {
+        id: n.id,
+        name: (n.data as BlockNodeData)?.name ?? n.id,
+        type: (n.data as BlockNodeData)?.type ?? "unknown",
+        config: {},
+      };
+    });
+    const newEdges: WorkflowEdge[] = edges.map((e, i) => ({
+      id: e.id,
+      sourceBlockId: e.source,
+      targetBlockId: e.target,
+      sourceHandle: e.sourceHandle ?? null,
+      sortOrder: i,
+    }));
+    onGraphChange?.(newBlocks, newEdges);
+  }, [blocks, onGraphChange]);
+
+  const onNodesChange: OnNodesChange<Node<BlockNodeData>> = useCallback((changes) => {
+    setEditNodes((nds) => {
+      const next = applyNodeChanges(changes, nds);
+      // Only emit when nodes are added/removed (not on every drag tick)
+      const structural = changes.some((c) => c.type === "remove" || c.type === "add");
+      if (structural) emitChange(next, editEdges);
+      return next;
+    });
+  }, [editEdges, emitChange]);
+
+  const onEdgesChange: OnEdgesChange = useCallback((changes) => {
+    setEditEdges((eds) => {
+      const next = applyEdgeChanges(changes, eds);
+      const structural = changes.some((c) => c.type === "remove" || c.type === "add");
+      if (structural) emitChange(editNodes, next);
+      return next;
+    });
+  }, [editNodes, emitChange]);
+
+  const onConnect = useCallback((conn: Connection) => {
+    setEditEdges((eds) => {
+      const newEdge: Edge = {
+        id: `e-${conn.source}-${conn.target}-${Date.now()}`,
+        source: conn.source!,
+        target: conn.target!,
+        sourceHandle: conn.sourceHandle,
+        type: "smoothstep",
+        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
+        style: {
+          stroke: conn.sourceHandle === "condition-true" ? "rgb(34 197 94)"
+                : conn.sourceHandle === "condition-false" ? "rgb(239 68 68)"
+                : undefined,
+        },
+      };
+      const next = addEdge(newEdge, eds);
+      emitChange(editNodes, next);
+      return next;
+    });
+  }, [editNodes, emitChange]);
+
   return (
     <div style={{ height, width: "100%" }} className="border border-border rounded-md overflow-hidden bg-bg">
       <ReactFlow
-        nodes={enrichedNodes}
-        edges={rfEdges}
+        nodes={displayNodes}
+        edges={displayEdges}
         nodeTypes={nodeTypes}
         fitView
-        nodesDraggable={false}
-        nodesConnectable={false}
+        nodesDraggable={mode === "edit"}
+        nodesConnectable={mode === "edit"}
         elementsSelectable
+        deleteKeyCode={mode === "edit" ? ["Backspace", "Delete"] : null}
+        onNodesChange={mode === "edit" ? onNodesChange : undefined}
+        onEdgesChange={mode === "edit" ? onEdgesChange : undefined}
+        onConnect={mode === "edit" ? onConnect : undefined}
         onNodeClick={handleNodeClick}
         proOptions={{ hideAttribution: true }}
       >

@@ -1,5 +1,6 @@
-import { Link } from "react-router-dom";
-import { useWorkflows, useUpdateWorkflowStatus, useExecuteWorkflow } from "../hooks/useWorkflows";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useWorkflows, useUpdateWorkflowStatus, useExecuteWorkflow, useCreateWorkflow } from "../hooks/useWorkflows";
 import type { Workflow, WorkflowStatus } from "../hooks/useWorkflows";
 
 function StatusBadge({ status }: { status: WorkflowStatus }) {
@@ -19,20 +20,44 @@ function TypeBadge({ type }: { type: Workflow["type"] }) {
 }
 
 export function WorkflowsPage() {
+  const navigate = useNavigate();
   const { data, isLoading } = useWorkflows();
   const updateStatus = useUpdateWorkflowStatus();
   const execute = useExecuteWorkflow();
+  const createWorkflow = useCreateWorkflow();
+  const [creating, setCreating] = useState(false);
 
   const workflows = data?.workflows ?? [];
+
+  async function onNewWorkflow() {
+    const name = prompt("Name this workflow:", "New Workflow");
+    if (!name?.trim()) return;
+    setCreating(true);
+    try {
+      const wf = await createWorkflow.mutateAsync({ name: name.trim() });
+      navigate(`/workflows/${wf.id}/edit`);
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-4xl mx-auto">
-        <header className="mb-6">
-          <h1 className="text-2xl font-semibold text-text-primary">Workflows</h1>
-          <p className="text-sm text-text-secondary mt-1">
-            Event-driven automations. Each workflow is a DAG of blocks triggered by events, cron, or manual runs.
-          </p>
+        <header className="mb-6 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-text-primary">Workflows</h1>
+            <p className="text-sm text-text-secondary mt-1">
+              Event-driven automations. Each workflow is a DAG of blocks triggered by events, cron, or manual runs.
+            </p>
+          </div>
+          <button
+            onClick={onNewWorkflow}
+            disabled={creating}
+            className="shrink-0 px-3 py-1.5 text-sm bg-accent text-white rounded-md hover:opacity-90 disabled:opacity-50"
+          >
+            {creating ? "Creating…" : "+ New workflow"}
+          </button>
         </header>
 
         {isLoading && <div className="text-sm text-text-secondary">Loading…</div>}
@@ -57,6 +82,12 @@ export function WorkflowsPage() {
                   </Link>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <Link
+                    to={`/workflows/${wf.id}/edit`}
+                    className="px-3 py-1.5 text-xs border border-border rounded-md hover:bg-bg-hover"
+                  >
+                    Edit
+                  </Link>
                   <button
                     onClick={() => execute.mutate({ id: wf.id })}
                     disabled={execute.isPending || wf.status === "archived"}
