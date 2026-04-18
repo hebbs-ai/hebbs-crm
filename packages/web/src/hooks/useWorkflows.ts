@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -118,17 +119,57 @@ export function useWorkflowRuns(workflowId: string | undefined) {
 }
 
 export function useWorkflowRun(runId: string | undefined) {
-  return useQuery({
+  const qc = useQueryClient();
+  const query = useQuery({
     queryKey: ["workflow-runs", runId],
     queryFn: () => admin<{ run: WorkflowRun; blocks: BlockRun[] }>(`/workflow-runs/${runId}`),
     enabled: !!runId,
-    refetchInterval: (query) => {
-      // Poll more aggressively while the run is still in flight
-      const run = query.state.data?.run;
-      if (run && (run.status === "running" || run.status === "queued")) return 2000;
+    // SSE supplies pushes below. We keep a backup poll (slow) for any
+    // dropped connections / dev-server hot-reloads where SSE reconnects
+    // haven't kicked in yet.
+    refetchInterval: (q) => {
+      const run = q.state.data?.run;
+      if (run && (run.status === "running" || run.status === "queued")) return 10000;
       return false;
     },
   });
+
+  // Live updates via server-sent events. Every workflow lifecycle event
+  // for this run triggers a cache invalidate → React Query refetches the
+  // run + blocks. Keeps the UI in sync with the engine without having
+  // to reconstruct partial state here.
+  useEffect(() => {
+    if (!runId) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    const url = `/api/admin/workflow-runs/${runId}/events?token=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
+    const onEvent = () => {
+      qc.invalidateQueries({ queryKey: ["workflow-runs", runId] });
+    };
+    // Listen for every workflow:* event. Using addEventListener for each
+    // known type because EventSource routes by `event:` name.
+    const types = [
+      "workflow:run_started",
+      "workflow:run_completed",
+      "workflow:run_failed",
+      "workflow:run_paused",
+      "workflow:block_started",
+      "workflow:block_completed",
+      "workflow:block_failed",
+      "workflow:block_waiting",
+      "workflow:block_skipped",
+    ];
+    for (const t of types) es.addEventListener(t, onEvent);
+    // Don't need to handle errors aggressively — EventSource auto-reconnects,
+    // and the 10s poll above covers any gap.
+    return () => {
+      for (const t of types) es.removeEventListener(t, onEvent);
+      es.close();
+    };
+  }, [runId, qc]);
+
+  return query;
 }
 
 // ── Mutations ──────────────────────────────────────────────────────────────
