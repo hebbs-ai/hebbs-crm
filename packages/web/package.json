@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "@boringos-crm/shared": "workspace:*",
+    "@dagrejs/dagre": "^3.0.0",
     "@tanstack/react-query": "^5.0.0",
+    "@xyflow/react": "^12.10.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

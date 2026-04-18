@@ -33,8 +33,8 @@ export interface Workflow {
   updatedAt: string;
 }
 
-export type WorkflowRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
-export type BlockRunStatus = "pending" | "running" | "completed" | "skipped" | "failed";
+export type WorkflowRunStatus = "queued" | "running" | "waiting_for_human" | "completed" | "failed" | "cancelled";
+export type BlockRunStatus = "pending" | "running" | "completed" | "skipped" | "failed" | "waiting";
 
 export interface WorkflowRun {
   id: string;

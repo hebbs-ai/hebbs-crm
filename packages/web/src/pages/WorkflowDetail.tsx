@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useWorkflow, useWorkflowRuns, useExecuteWorkflow, useUpdateWorkflowStatus } from "../hooks/useWorkflows";
 import type { WorkflowRunStatus } from "../hooks/useWorkflows";
+import { WorkflowCanvas } from "../components/WorkflowCanvas";
 
 function runStatusColor(status: WorkflowRunStatus): string {
   return status === "completed" ? "text-text-green"
@@ -29,6 +30,43 @@ function formatRelative(iso: string | null): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   return `${d}d ago`;
+}
+
+function DefinitionView({
+  blocks, edges,
+}: { blocks: ReturnType<typeof useWorkflow>["data"] extends infer T ? T extends { blocks: infer B } ? B : never : never; edges: ReturnType<typeof useWorkflow>["data"] extends infer T ? T extends { edges: infer E } ? E : never : never }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const selectedBlock = selected ? blocks.find((b) => b.id === selected) : null;
+
+  return (
+    <div className="space-y-4">
+      <WorkflowCanvas
+        blocks={blocks}
+        edges={edges}
+        selectedBlockId={selected}
+        onBlockClick={setSelected}
+        height={420}
+      />
+
+      {selectedBlock ? (
+        <section className="border border-border rounded-md p-3 bg-bg">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="font-mono text-xs text-text-tertiary">{selectedBlock.id}</span>
+            <span className="text-[10px] uppercase tracking-wide font-semibold text-text-tertiary px-1.5 py-0.5 rounded border border-border">{selectedBlock.type}</span>
+            <span className="text-sm font-medium text-text-primary">{selectedBlock.name}</span>
+            <button onClick={() => setSelected(null)} className="ml-auto text-xs text-text-tertiary hover:text-text-secondary">Clear</button>
+          </div>
+          {Object.keys(selectedBlock.config).length > 0 ? (
+            <pre className="text-xs bg-bg-secondary border border-border rounded p-2 overflow-x-auto">{JSON.stringify(selectedBlock.config, null, 2)}</pre>
+          ) : (
+            <p className="text-xs text-text-tertiary italic">No config.</p>
+          )}
+        </section>
+      ) : (
+        <p className="text-xs text-text-tertiary text-center py-2">Click a block to see its config.</p>
+      )}
+    </div>
+  );
 }
 
 export function WorkflowDetailPage() {
@@ -145,35 +183,10 @@ export function WorkflowDetailPage() {
         )}
 
         {tab === "definition" && (
-          <div className="space-y-4">
-            <section>
-              <h3 className="text-xs uppercase tracking-wide text-text-tertiary font-semibold mb-2">Blocks ({workflow.blocks.length})</h3>
-              <div className="space-y-1">
-                {workflow.blocks.map((b) => (
-                  <div key={b.id} className="border border-border rounded-md p-3 bg-bg text-sm">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-mono text-xs text-text-tertiary">{b.id}</span>
-                      <span className="text-[10px] uppercase tracking-wide font-semibold text-text-tertiary px-1.5 py-0.5 rounded border border-border">{b.type}</span>
-                    </div>
-                    {Object.keys(b.config).length > 0 && (
-                      <pre className="mt-2 text-xs bg-bg-secondary border border-border rounded p-2 overflow-x-auto">{JSON.stringify(b.config, null, 2)}</pre>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-            <section>
-              <h3 className="text-xs uppercase tracking-wide text-text-tertiary font-semibold mb-2">Edges ({workflow.edges.length})</h3>
-              <div className="space-y-1 font-mono text-xs">
-                {workflow.edges.map((e) => (
-                  <div key={e.id} className="text-text-secondary">
-                    {e.sourceBlockId} → {e.targetBlockId}
-                    {e.sourceHandle && <span className="text-text-tertiary"> (handle: {e.sourceHandle})</span>}
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
+          <DefinitionView
+            blocks={workflow.blocks}
+            edges={workflow.edges}
+          />
         )}
       </div>
     </div>

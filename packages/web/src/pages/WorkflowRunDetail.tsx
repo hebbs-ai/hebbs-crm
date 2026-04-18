@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useWorkflowRun } from "../hooks/useWorkflows";
+import { useWorkflowRun, useWorkflow } from "../hooks/useWorkflows";
 import type { BlockRun, BlockRunStatus } from "../hooks/useWorkflows";
+import { WorkflowCanvas } from "../components/WorkflowCanvas";
 
 function blockStatusColor(status: BlockRunStatus): string {
   return status === "completed" ? "text-text-green"
@@ -26,12 +27,13 @@ function formatDuration(ms: number | null): string {
   return `${(ms / 60000).toFixed(1)}m`;
 }
 
-function BlockRunCard({ block }: { block: BlockRun }) {
-  const [open, setOpen] = useState(false);
+function BlockRunCard({ block, forceOpen }: { block: BlockRun; forceOpen?: boolean }) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = forceOpen || localOpen;
   return (
-    <div className="border border-border rounded-md overflow-hidden">
+    <div className={`border rounded-md overflow-hidden transition-colors ${forceOpen ? "border-accent" : "border-border"}`} id={`block-${block.blockId}`}>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => setLocalOpen(!localOpen)}
         className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-bg-hover text-left"
       >
         <span className={`w-2 h-2 rounded-full shrink-0 ${blockStatusDot(block.status)}`} />
@@ -86,12 +88,15 @@ function BlockRunCard({ block }: { block: BlockRun }) {
 
 export function WorkflowRunDetailPage() {
   const { id, runId } = useParams<{ id: string; runId: string }>();
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const { data, isLoading } = useWorkflowRun(runId);
+  const wf = useWorkflow(id);
 
   if (isLoading) return <div className="p-6 text-sm text-text-secondary">Loading…</div>;
   if (!data) return <div className="p-6 text-sm text-text-secondary">Run not found</div>;
 
   const { run, blocks } = data;
+  const selectedBlock = selectedBlockId ? blocks.find((b) => b.blockId === selectedBlockId) : null;
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -103,8 +108,8 @@ export function WorkflowRunDetailPage() {
         <header className="mb-6">
           <h1 className="text-xl font-semibold text-text-primary font-mono">Run {run.id.slice(0, 8)}</h1>
           <div className="flex items-center gap-3 mt-1 text-xs text-text-secondary">
-            <span className={`uppercase tracking-wide font-semibold ${run.status === "completed" ? "text-text-green" : run.status === "failed" ? "text-text-red" : "text-text-amber"}`}>
-              {run.status}
+            <span className={`uppercase tracking-wide font-semibold ${run.status === "completed" ? "text-text-green" : run.status === "failed" ? "text-text-red" : run.status === "waiting_for_human" ? "text-text-purple" : "text-text-amber"}`}>
+              {run.status.replace("_", " ")}
             </span>
             <span>·</span>
             <span>{run.triggerType}</span>
@@ -115,6 +120,25 @@ export function WorkflowRunDetailPage() {
           </div>
           {run.error && <div className="mt-2 text-sm text-text-red">{run.error}</div>}
         </header>
+
+        {/* Visual DAG with per-block status overlaid. Click a node to jump to its detail. */}
+        {wf.data && (
+          <section className="mb-6">
+            <WorkflowCanvas
+              blocks={wf.data.blocks}
+              edges={wf.data.edges}
+              blockRuns={blocks}
+              selectedBlockId={selectedBlockId}
+              onBlockClick={setSelectedBlockId}
+              height={360}
+            />
+            {selectedBlock && (
+              <div className="mt-2 text-xs text-text-tertiary text-center">
+                ↓ Detail for <span className="font-mono text-text-secondary">{selectedBlock.blockName}</span> ↓
+              </div>
+            )}
+          </section>
+        )}
 
         {run.triggerPayload && Object.keys(run.triggerPayload).length > 0 && (
           <section className="mb-6">
@@ -128,7 +152,13 @@ export function WorkflowRunDetailPage() {
             Blocks ({blocks.length})
           </h3>
           <div className="space-y-2">
-            {blocks.map((b) => <BlockRunCard key={b.id} block={b} />)}
+            {blocks.map((b) => (
+              <BlockRunCard
+                key={b.id}
+                block={b}
+                forceOpen={selectedBlockId === b.blockId}
+              />
+            ))}
           </div>
         </section>
       </div>
