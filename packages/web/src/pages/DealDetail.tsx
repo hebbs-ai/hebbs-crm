@@ -13,6 +13,7 @@ import { Badge } from "../components/ui/Badge";
 import { Input, Select, Textarea } from "../components/ui/FormField";
 import { EntityTasks } from "../components/EntityTasks";
 import { EntityDocuments } from "../components/EntityDocuments";
+import { EntityActions } from "../components/EntityActions";
 import type { Deal, PipelineStage } from "@boringos-crm/shared";
 
 // ---------------------------------------------------------------------------
@@ -319,6 +320,11 @@ export function DealDetailPage() {
           <h2 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">Activity Timeline</h2>
           <div className="mb-6">
             <ActivityTimeline activities={activities} />
+          </div>
+
+          {/* Pending actions for this deal */}
+          <div className="mb-6">
+            <EntityActions entityType="deal" entityId={deal.id} />
           </div>
 
           {/* Tasks */}

@@ -12,6 +12,7 @@ import { Badge } from "../components/ui/Badge";
 import { EntityTasks } from "../components/EntityTasks";
 import { EntityDocuments } from "../components/EntityDocuments";
 import { ContactDossierView } from "../components/DossierView";
+import { EntityActions } from "../components/EntityActions";
 import type { Deal, Contact, ContactDossier } from "@boringos-crm/shared";
 import { isContactDossier } from "@boringos-crm/shared";
 
@@ -274,6 +275,9 @@ export function ContactDetailPage() {
                   </ul>
                 </div>
               )}
+
+              {/* Pending actions for this contact */}
+              <EntityActions entityType="contact" entityId={contact.id} />
 
               {/* Tasks */}
               <div>

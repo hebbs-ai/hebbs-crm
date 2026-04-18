@@ -17,20 +17,32 @@ import { getGmailClient, getCalendarClient } from "../google-client.js";
 export function createActionRoutes(ctx: CrmContext) {
   const app = new Hono();
 
-  // GET / — list pending actions for the current user
-  // Query params: kind (filter by origin_kind), limit, offset
+  // GET / — list actions for the current user (defaults to pending)
+  // Query params:
+  //   kind=agent_action|human_todo|agent_blocked
+  //   status=todo|done|cancelled|all  (default: todo)
+  //   entityType=contact|deal|company  + entityId=UUID  → filter via proposed_params
+  //   limit, offset
   app.get("/", async (c) => {
     const tenantId = c.req.header("X-Tenant-Id")!;
     const userId = c.req.header("X-User-Id");
-    const { kind, status = "todo", limit = "50", offset = "0" } = c.req.query();
+    const { kind, status = "todo", entityType, entityId, limit = "50", offset = "0" } = c.req.query();
 
     const filters: Array<ReturnType<typeof sql>> = [
       sql`tenant_id = ${tenantId}`,
       sql`origin_kind IN ('agent_action', 'human_todo', 'agent_blocked')`,
     ];
-    if (status !== "all") filters.push(sql`status = ${status}`);
+    if (status === "resolved") {
+      filters.push(sql`status IN ('done', 'cancelled')`);
+    } else if (status !== "all") {
+      filters.push(sql`status = ${status}`);
+    }
     if (userId) filters.push(sql`assignee_user_id = ${userId}::uuid`);
     if (kind) filters.push(sql`origin_kind = ${kind}`);
+    if (entityType && entityId) {
+      const key = entityType === "contact" ? "contactId" : entityType === "deal" ? "dealId" : entityType === "company" ? "companyId" : null;
+      if (key) filters.push(sql`proposed_params->>${key} = ${entityId}`);
+    }
 
     const where = filters.reduce((acc, f, i) => i === 0 ? f : sql`${acc} AND ${f}`);
 
@@ -49,16 +61,22 @@ export function createActionRoutes(ctx: CrmContext) {
     return c.json({ data: rows, limit: Number(limit), offset: Number(offset) });
   });
 
-  // GET /count — pending action count for badge display
+  // GET /count — pending action count (sidebar badge or per-entity surfaces)
+  // Supports entityType + entityId for "N pending for this contact" displays.
   app.get("/count", async (c) => {
     const tenantId = c.req.header("X-Tenant-Id")!;
     const userId = c.req.header("X-User-Id");
+    const { entityType, entityId } = c.req.query();
     const filters = [
       sql`tenant_id = ${tenantId}`,
       sql`status = 'todo'`,
       sql`origin_kind IN ('agent_action', 'human_todo', 'agent_blocked')`,
     ];
-    if (userId) filters.push(sql`assignee_user_id = ${userId}::uuid`);
+    if (userId && !entityType) filters.push(sql`assignee_user_id = ${userId}::uuid`);
+    if (entityType && entityId) {
+      const key = entityType === "contact" ? "contactId" : entityType === "deal" ? "dealId" : entityType === "company" ? "companyId" : null;
+      if (key) filters.push(sql`proposed_params->>${key} = ${entityId}`);
+    }
     const where = filters.reduce((acc, f, i) => i === 0 ? f : sql`${acc} AND ${f}`);
     const rows = await ctx.db.execute(sql`SELECT COUNT(*)::int AS n FROM tasks WHERE ${where}`) as unknown as Array<{ n: number }>;
     return c.json({ pending: rows[0]?.n ?? 0 });

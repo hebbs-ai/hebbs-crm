@@ -35,22 +35,37 @@ async function call<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export function useActions(opts?: { status?: string; kind?: string }) {
-  const params = new URLSearchParams();
-  if (opts?.status) params.set("status", opts.status);
-  if (opts?.kind) params.set("kind", opts.kind);
-  const qs = params.toString();
+export interface ActionListOpts {
+  status?: string;
+  kind?: string;
+  entityType?: "contact" | "deal" | "company";
+  entityId?: string;
+}
+
+function toParams(opts: ActionListOpts = {}): string {
+  const p = new URLSearchParams();
+  if (opts.status) p.set("status", opts.status);
+  if (opts.kind) p.set("kind", opts.kind);
+  if (opts.entityType) p.set("entityType", opts.entityType);
+  if (opts.entityId) p.set("entityId", opts.entityId);
+  const qs = p.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export function useActions(opts: ActionListOpts = {}) {
+  const qs = toParams(opts);
   return useQuery({
-    queryKey: ["actions", opts?.status ?? "todo", opts?.kind ?? "all"],
-    queryFn: () => call<{ data: ActionItem[] }>(qs ? `?${qs}` : ""),
-    refetchInterval: 15000, // poll until SSE arrives in Phase 4
+    queryKey: ["actions", "list", opts.status ?? "todo", opts.kind ?? "all", opts.entityType ?? "", opts.entityId ?? ""],
+    queryFn: () => call<{ data: ActionItem[] }>(qs),
+    refetchInterval: 15000, // polling — SSE deferred (framework SSE uses admin key)
   });
 }
 
-export function useActionCount() {
+export function useActionCount(opts: { entityType?: ActionListOpts["entityType"]; entityId?: string } = {}) {
+  const qs = toParams(opts);
   return useQuery({
-    queryKey: ["actions", "count"],
-    queryFn: () => call<{ pending: number }>("/count"),
+    queryKey: ["actions", "count", opts.entityType ?? "", opts.entityId ?? ""],
+    queryFn: () => call<{ pending: number }>(`/count${qs}`),
     refetchInterval: 15000,
   });
 }
