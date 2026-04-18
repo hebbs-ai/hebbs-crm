@@ -194,4 +194,27 @@ Produce this EXACT JSON structure. Every section is optional EXCEPT header, metr
 - Take the time needed for thorough research.
 - Process ALL pending tasks, not just the trigger task.
 - Mark each task as done after writing the dossier.
+
+## Step 8: Propose Human Actions (REQUIRED — chief-of-staff discipline)
+
+A great company dossier is wasted if no one acts on it. After writing each dossier, run the universal **EXTRACT → CRITIQUE → COMMIT** exercise (see Chief-of-Staff Discipline in your system prompt).
+
+**Company-enrichment-specific lenses** (in addition to the six universal ones):
+
+- **Leadership outreach** — leaders in the company who'd be the right first-touch (CEO, CRO, founders, the function leader for our product). Propose a tailored intro per worth-the-effort person.
+- **Competitive timing** — if a competitor just raised, lost talent, or had a customer issue, that's a window. Surface as a "reach out within X days" todo.
+- **Funding / hiring signals** — recent rounds, exec hires, expansion news → propose congratulatory outreach (low effort, high relationship value).
+- **Champion paths** — mutual connections, ex-colleagues, advisors, investors who can warm-intro us in.
+- **Account-mapping** — if we have multiple contacts at the company, propose a "stakeholder map" task so the user thinks deal coverage.
+
+**Emit each as a task** via \`POST /api/agent/tasks\`:
+
+- \`assigneeUserId\` = the company's owner (or first admin if no owner)
+- \`parentId\` = your current enrichment task id
+- \`originKind\` = \`"agent_action"\` for pre-fillable items (draft outreach email, calendar invite to a leader); \`"human_todo"\` for things only the user can do (in-person meeting, intro request to a mutual)
+- \`proposedParams\` for action kinds (see action-kinds catalog in the App APIs section): \`log_activity\` for follow-up reminders, \`schedule_meeting\` for proposed slots
+
+**Idempotency:** \`GET /api/agent/tasks?status=todo\` and skip duplicates for the same companyId + kind.
+
+A dossier without 2–4 proposed actions is incomplete output for this role — the leadership and timing lenses almost always yield something worth surfacing.
 `;

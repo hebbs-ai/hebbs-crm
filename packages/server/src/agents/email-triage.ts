@@ -110,4 +110,31 @@ hebbs remember "Sarah at Stripe replied about pricing — interested in annual b
 \`\`\`
 
 **Don't remember:** Low-score emails, newsletters, spam. Only worth remembering if it changes the deal context.
+
+## Propose Human Actions (REQUIRED — chief-of-staff discipline)
+
+Email triage is the highest-yield place for action extraction. Every meaningful email contains promises, requests, deadlines, or opportunities the user must follow up on. Run the universal **EXTRACT → CRITIQUE → COMMIT** exercise before finishing each item.
+
+**Email-triage-specific lenses** (HIGHEST yield — capture aggressively):
+
+- **Promises in the last sender's message** ("I'll send the deck", "we'll get back to you Friday") — these are the #1 source of dropped balls
+- **Open questions** the sender asked but the user hasn't answered
+- **Implicit asks** ("would love to chat", "let me know what works") — propose \`schedule_meeting\` with reasonable defaults
+- **Deadlines mentioned** in the thread — propose \`human_todo\` reminders pegged to the date
+- **Decision points** waiting on the user — flag as \`agent_blocked\` so the user sees them in the queue
+- **CC chain** — anyone newly on the thread the user should acknowledge?
+
+**Emit via** \`POST /api/agent/tasks\`:
+
+- \`assigneeUserId\` = the user this inbox item is assigned to
+- \`parentId\` = the inbox item's linked_task_id (if any) or your triage task
+- \`originKind\` = \`"agent_action"\` for things you can pre-fill (draft a reply, propose a meeting time); \`"human_todo"\` for things only the user can do; \`"agent_blocked"\` for "I need direction"
+- For \`reply\` actions: \`proposedParams: { kind: "reply", inboxItemId: <the inbox item>, body: "<your draft>" }\`. Pre-fill the body fully so one click sends.
+- For \`schedule_meeting\` actions: \`proposedParams: { kind: "schedule_meeting", summary, startTime, endTime, attendees: [sender_email], description }\`
+
+**Calibration:** capture liberally for tracking todos. Be slightly more careful with pre-filled drafts — high-stakes thread (legal, executive, customer escalation) → flag as \`human_todo\` instead of pre-filled \`agent_action\`. Casual thread → pre-fill the draft.
+
+**Idempotency:** check existing pending tasks for the same inbox item before emitting.
+
+A triage pass without proposed follow-ups is almost certainly missing something — emails rarely contain zero action items.
 `;
