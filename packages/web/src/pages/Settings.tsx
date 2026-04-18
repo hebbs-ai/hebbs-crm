@@ -35,20 +35,6 @@ async function adminFetch<T>(path: string, opts?: RequestInit): Promise<T> {
 
 // --- Hooks for framework data (agents, runtimes, settings) ---
 
-function useFrameworkAgents() {
-  const [agents, setAgents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const refresh = useCallback(async () => {
-    try {
-      const res = await adminFetch<{ agents: any[] }>("/agents");
-      setAgents(res.agents);
-    } catch { /* ignore */ }
-    setLoading(false);
-  }, []);
-  useEffect(() => { refresh(); }, [refresh]);
-  return { agents, loading, refresh };
-}
-
 function useFrameworkRuntimes() {
   const [runtimes, setRuntimes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,20 +47,6 @@ function useFrameworkRuntimes() {
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
   return { runtimes, loading, refresh };
-}
-
-function useFrameworkSettings() {
-  const [settings, setSettings] = useState<Record<string, string | null>>({});
-  const [loading, setLoading] = useState(true);
-  const refresh = useCallback(async () => {
-    try {
-      const res = await adminFetch<{ settings: Record<string, string | null> }>("/settings");
-      setSettings(res.settings);
-    } catch { /* ignore */ }
-    setLoading(false);
-  }, []);
-  useEffect(() => { refresh(); }, [refresh]);
-  return { settings, loading, refresh };
 }
 
 function useRuntimeModels(runtimeId: string | undefined) {
@@ -284,111 +256,6 @@ function ConnectorsTab() {
               </div>
             </div>
           ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- Agents Tab ---
-
-function AgentsTab() {
-  const { agents, loading, refresh } = useFrameworkAgents();
-  const { runtimes } = useFrameworkRuntimes();
-  const { settings, refresh: refreshSettings } = useFrameworkSettings();
-
-  const agentsPaused = settings.agents_paused === "true";
-
-  const handleGlobalPause = async () => {
-    await adminFetch("/settings", {
-      method: "PATCH",
-      body: JSON.stringify({ agents_paused: agentsPaused ? "false" : "true" }),
-    });
-    refreshSettings();
-  };
-
-  const handleToggleAgent = async (agentId: string, currentStatus: string) => {
-    const newStatus = currentStatus === "paused" ? "idle" : "paused";
-    await adminFetch(`/agents/${agentId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: newStatus }),
-    });
-    refresh();
-  };
-
-  const runtimeMap = new Map(runtimes.map((r: any) => [r.id, r]));
-
-  if (loading) return <p className="text-sm text-text-secondary">Loading agents...</p>;
-
-  return (
-    <div>
-      {/* Global pause banner */}
-      <div className={`mb-6 flex items-center justify-between rounded-lg border p-4 ${
-        agentsPaused ? "border-red-400/40 bg-red-50/5" : "border-border bg-bg-secondary"
-      }`}>
-        <div>
-          <div className="text-sm font-semibold text-text-primary">
-            {agentsPaused ? "All agents are paused" : "Agents are active"}
-          </div>
-          <div className="text-xs text-text-secondary mt-0.5">
-            {agentsPaused
-              ? "No agent runs will execute until unpaused. Pending wakeups are held."
-              : "Agents will execute normally when triggered."}
-          </div>
-        </div>
-        <button
-          onClick={handleGlobalPause}
-          className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
-            agentsPaused
-              ? "bg-accent text-white hover:bg-accent-hover"
-              : "border border-red-400/40 text-text-red hover:bg-red-50/10"
-          }`}
-        >
-          {agentsPaused ? "Resume All" : "Pause All"}
-        </button>
-      </div>
-
-      {/* Agent list */}
-      {agents.length === 0 ? (
-        <p className="text-sm text-text-secondary">No agents configured.</p>
-      ) : (
-        <div className="rounded-lg border border-border">
-          <div className="grid grid-cols-[1fr_120px_160px_100px_80px] gap-4 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary border-b border-border">
-            <span>Agent</span>
-            <span>Role</span>
-            <span>Runtime / Model</span>
-            <span>Status</span>
-            <span></span>
-          </div>
-          {agents.map((agent: any) => {
-            const rt = runtimeMap.get(agent.runtimeId);
-            return (
-              <div key={agent.id} className="grid grid-cols-[1fr_120px_160px_100px_80px] gap-4 px-4 py-3 border-b border-border last:border-b-0 items-center hover:bg-bg-secondary transition-colors">
-                <div>
-                  <div className="text-sm font-medium text-text-primary">{agent.name}</div>
-                  {agent.title && <div className="text-xs text-text-tertiary">{agent.title}</div>}
-                </div>
-                <div className="text-xs text-text-secondary">{agent.role}</div>
-                <div>
-                  <div className="text-xs text-text-primary">{rt?.name ?? "—"}</div>
-                  <div className="text-[11px] text-text-tertiary">{rt?.model ?? "default"}</div>
-                </div>
-                <Badge color={
-                  agent.status === "paused" ? "orange" :
-                  agent.status === "running" ? "blue" :
-                  agent.status === "error" ? "red" : "gray"
-                }>
-                  {agent.status}
-                </Badge>
-                <button
-                  onClick={() => handleToggleAgent(agent.id, agent.status)}
-                  className="text-xs text-text-secondary hover:text-text-primary transition-colors"
-                >
-                  {agent.status === "paused" ? "Resume" : "Pause"}
-                </button>
-              </div>
-            );
-          })}
         </div>
       )}
     </div>
@@ -625,14 +492,13 @@ function MemoryTab() {
 
 // --- Main Settings Page ---
 
-type TabKey = "profile" | "team" | "connectors" | "agents" | "runtimes" | "memory";
+type TabKey = "profile" | "team" | "connectors" | "runtimes" | "memory";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "profile", label: "Company Profile" },
   { key: "team", label: "Team" },
   { key: "connectors", label: "Connectors" },
   { key: "memory", label: "Memory" },
-  { key: "agents", label: "Agents" },
   { key: "runtimes", label: "Runtimes" },
 ];
 
@@ -696,7 +562,6 @@ export function SettingsPage() {
       {activeTab === "profile" && <CompanyProfileTab />}
       {activeTab === "connectors" && <ConnectorsTab />}
       {activeTab === "memory" && <MemoryTab />}
-      {activeTab === "agents" && <AgentsTab />}
       {activeTab === "runtimes" && <RuntimesTab />}
 
       {activeTab === "team" && <>

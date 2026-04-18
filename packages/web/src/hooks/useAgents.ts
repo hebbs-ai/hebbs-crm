@@ -93,6 +93,72 @@ export function useUpdateAgent() {
   });
 }
 
+export interface Runtime {
+  id: string;
+  name: string;
+  type?: string | null;
+  model?: string | null;
+  isDefault?: boolean;
+}
+
+export function useRuntimes() {
+  return useQuery({
+    queryKey: ["runtimes"],
+    queryFn: async () => {
+      const body = await adminFetch<{ runtimes: Runtime[] }>("/runtimes");
+      return body.runtimes;
+    },
+  });
+}
+
+export function useTenantSettings() {
+  return useQuery({
+    queryKey: ["tenant-settings"],
+    queryFn: async () => {
+      const body = await adminFetch<{ settings: Record<string, string | null> }>("/settings");
+      return body.settings;
+    },
+  });
+}
+
+export function useUpdateTenantSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Record<string, string | null>) =>
+      adminFetch<{ settings: Record<string, string | null> }>("/settings", {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tenant-settings"] });
+    },
+  });
+}
+
+export interface CreateAgentInput {
+  name: string;
+  role?: string;
+  title?: string;
+  reportsTo?: string | null;
+  runtimeId?: string | null;
+  instructions?: string;
+  skills?: string[];
+}
+
+export function useCreateAgent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateAgentInput) =>
+      adminFetch<Agent>("/agents", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
 export function useUpdateAgentSkills() {
   const qc = useQueryClient();
   return useMutation({
