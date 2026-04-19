@@ -21,6 +21,16 @@ export function useDeal(id: string) {
     queryKey: ["deals", id],
     queryFn: () => api.get<{ data: Deal }>(`/deals/${id}`),
     enabled: !!id,
+    // Poll while Deal Analyst is still producing intelligence for this deal.
+    // A new deal fires the analyst in the background; the page can sit open
+    // for 30-60s before the run finishes, and nothing else invalidates this
+    // query when it lands. Polling stops as soon as agentIntelligence is
+    // populated.
+    refetchInterval: (query) => {
+      const intel = (query.state.data as { data?: Deal } | undefined)?.data
+        ?.customFields?.agentIntelligence;
+      return intel && typeof intel === "object" ? false : 15_000;
+    },
   });
 }
 

@@ -311,7 +311,8 @@ export function DealDetailPage() {
               </div>
             ) : (
               <div className="text-sm text-text-tertiary italic">
-                Pending analysis — Deal Analyst runs daily at 6 AM
+                Analysis pending — the Deal Analyst runs automatically on new deals
+                and nightly for the rest of the pipeline. This page will refresh on its own.
               </div>
             )}
           </div>
