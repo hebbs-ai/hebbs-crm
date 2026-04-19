@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { useParams, Link, useNavigate, useBlocker } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   useWorkflow,
   useUpdateWorkflow,
@@ -49,18 +49,10 @@ export function WorkflowEditorPage() {
     }
   }, [wf.data]);
 
-  // Prevent accidental navigation with unsaved changes
-  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
-    dirty && currentLocation.pathname !== nextLocation.pathname
-  );
-  useEffect(() => {
-    if (blocker.state === "blocked") {
-      const ok = confirm("You have unsaved changes. Leave anyway?");
-      if (ok) blocker.proceed?.();
-      else blocker.reset?.();
-    }
-  }, [blocker]);
-
+  // Warn on tab close / refresh when there are unsaved changes. We don't
+  // intercept in-app navigation here because react-router's `useBlocker`
+  // requires a data router, which the app currently doesn't use; revisit
+  // if the app migrates to createBrowserRouter + RouterProvider.
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (dirty) { e.preventDefault(); e.returnValue = ""; }
