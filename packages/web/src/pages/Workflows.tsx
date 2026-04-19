@@ -30,11 +30,12 @@ export function WorkflowsPage() {
   const workflows = data?.workflows ?? [];
 
   async function onNewWorkflow() {
-    const name = prompt("Name this workflow:", "New Workflow");
-    if (!name?.trim()) return;
+    // Skip the prompt — create with a placeholder name and jump straight
+    // into the editor where the user can rename inline. Same number of
+    // clicks, no native dialog interrupting flow.
     setCreating(true);
     try {
-      const wf = await createWorkflow.mutateAsync({ name: name.trim() });
+      const wf = await createWorkflow.mutateAsync({ name: "Untitled workflow" });
       navigate(`/workflows/${wf.id}/edit`);
     } finally {
       setCreating(false);

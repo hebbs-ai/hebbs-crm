@@ -35,14 +35,20 @@ export function WorkflowEditorPage() {
   // Draft state — seeded from the loaded workflow, mutated as the user edits
   const [draftBlocks, setDraftBlocks] = useState<WorkflowBlock[]>([]);
   const [draftEdges, setDraftEdges] = useState<WorkflowEdge[]>([]);
+  const [draftName, setDraftName] = useState<string>("");
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  // Save status surfaces in the header — replaces the silent failure where
+  // a rejected PATCH left the user staring at "UNSAVED" with no explanation.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
 
   // Seed draft once the workflow loads
   useEffect(() => {
     if (wf.data) {
       setDraftBlocks(wf.data.blocks);
       setDraftEdges(wf.data.edges);
+      setDraftName(wf.data.name);
       setDirty(false);
     }
   }, [wf.data]);
@@ -102,9 +108,28 @@ export function WorkflowEditorPage() {
 
   const handleSave = useCallback(async () => {
     if (!id) return;
-    await update.mutateAsync({ id, patch: { blocks: draftBlocks, edges: draftEdges } });
-    setDirty(false);
-  }, [id, update, draftBlocks, draftEdges]);
+    setSaveError(null);
+    try {
+      const patch: Parameters<typeof update.mutateAsync>[0]["patch"] = {
+        blocks: draftBlocks,
+        edges: draftEdges,
+      };
+      const trimmed = draftName.trim();
+      if (trimmed && trimmed !== wf.data?.name) patch.name = trimmed;
+      await update.mutateAsync({ id, patch });
+      setDirty(false);
+      setSavedAt(Date.now());
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    }
+  }, [id, update, draftBlocks, draftEdges, draftName, wf.data?.name]);
+
+  // Auto-clear the "Saved" indicator after a few seconds.
+  useEffect(() => {
+    if (savedAt === null) return;
+    const t = setTimeout(() => setSavedAt(null), 2500);
+    return () => clearTimeout(t);
+  }, [savedAt]);
 
   const handleRunNow = useCallback(async () => {
     if (!id) return;
@@ -146,11 +171,23 @@ export function WorkflowEditorPage() {
       {/* Top bar */}
       <header className="shrink-0 border-b border-border px-4 py-2 flex items-center gap-3">
         <Link to={`/workflows/${id}`} className="text-sm text-text-secondary hover:text-text-primary">{"\u2190"}</Link>
-        <h1 className="text-sm font-semibold text-text-primary flex-1 min-w-0 truncate">{workflow.name}</h1>
+        <input
+          type="text"
+          value={draftName}
+          onChange={(e) => { setDraftName(e.target.value); setDirty(true); }}
+          placeholder="Untitled workflow"
+          className="text-sm font-semibold text-text-primary flex-1 min-w-0 truncate bg-transparent border-0 px-1 py-0.5 rounded hover:bg-bg-hover focus:bg-bg-secondary focus:outline-none focus:ring-1 focus:ring-accent"
+          aria-label="Workflow name"
+        />
         <span className="text-[10px] uppercase tracking-wide text-text-tertiary">{workflow.type} · {workflow.status}</span>
-        {dirty && (
+        {/* Save status — explicit feedback so a rejected save doesn't fail silently. */}
+        {saveError ? (
+          <span className="text-[10px] text-text-red font-semibold" title={saveError}>SAVE FAILED</span>
+        ) : savedAt ? (
+          <span className="text-[10px] text-text-green font-semibold">SAVED</span>
+        ) : dirty ? (
           <span className="text-[10px] text-text-amber font-semibold">UNSAVED</span>
-        )}
+        ) : null}
         <button
           onClick={handleRunNow}
           disabled={execute.isPending || workflow.status === "archived"}
@@ -166,6 +203,15 @@ export function WorkflowEditorPage() {
           {update.isPending ? "Saving…" : "Save"}
         </button>
       </header>
+
+      {/* Save error banner — shows below the top bar with the full message and a dismiss. */}
+      {saveError && (
+        <div className="shrink-0 border-b border-text-red/40 bg-surface-red/30 px-4 py-1.5 text-xs text-text-red flex items-center gap-3">
+          <span className="font-semibold">Couldn't save:</span>
+          <span className="flex-1 truncate" title={saveError}>{saveError}</span>
+          <button onClick={() => setSaveError(null)} className="text-text-red/70 hover:text-text-red">Dismiss</button>
+        </div>
+      )}
 
       {/* Validation warnings bar */}
       {validation.length > 0 && (
