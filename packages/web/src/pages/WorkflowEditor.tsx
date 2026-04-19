@@ -7,9 +7,7 @@ import {
   useAgentsForWorkflow,
 } from "../hooks/useWorkflows";
 import type { WorkflowBlock, WorkflowEdge } from "../hooks/useWorkflows";
-import { WorkflowCanvas } from "../components/WorkflowCanvas";
-import { BlockPalette } from "../components/BlockPalette";
-import { BlockConfigForm } from "../components/BlockConfigForm";
+import { WorkflowCanvas, BlockPalette, BlockConfigForm } from "@boringos/workflow-ui";
 
 function nextBlockId(blocks: WorkflowBlock[], baseType: string): string {
   // Generate a stable, readable id: "wake_1", "wake_2", "condition_1" …

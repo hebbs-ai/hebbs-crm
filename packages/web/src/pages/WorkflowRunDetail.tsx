@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useWorkflowRun, useWorkflow, useReplayRun } from "../hooks/useWorkflows";
 import type { BlockRun, BlockRunStatus } from "../hooks/useWorkflows";
-import { WorkflowCanvas } from "../components/WorkflowCanvas";
+import { WorkflowCanvas } from "@boringos/workflow-ui";
 
 function blockStatusColor(status: BlockRunStatus): string {
   return status === "completed" ? "text-text-green"

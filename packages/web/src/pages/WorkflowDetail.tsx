@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useWorkflow, useWorkflowRuns, useExecuteWorkflow, useUpdateWorkflowStatus } from "../hooks/useWorkflows";
 import type { WorkflowRunStatus } from "../hooks/useWorkflows";
-import { WorkflowCanvas } from "../components/WorkflowCanvas";
-import { RunDiffView } from "../components/RunDiffView";
+import { WorkflowCanvas, RunDiffView } from "@boringos/workflow-ui";
 
 function runStatusColor(status: WorkflowRunStatus): string {
   return status === "completed" ? "text-text-green"
