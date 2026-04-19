@@ -161,157 +161,20 @@ app.onTenantCreated(async (db, tenantId) => {
   await provisionCrmTenant(db as any, tenantId);
 });
 
-// Helper: find agent by role for a tenant, create task, wake it
-let agentEngineRef: any = null;
-async function wakeAgentByRole(
-  role: string, tenantId: string,
-  taskTitle: string, taskDescription: string, taskOriginKind: string,
-  payload: Record<string, unknown>,
-) {
-  if (!agentEngineRef || !dbRef) return;
-  const db = dbRef as any;
-  const { sql } = await import("drizzle-orm");
-
-  const agentRows = await db.execute(sql`
-    SELECT id FROM agents WHERE tenant_id = ${tenantId} AND role = ${role} LIMIT 1
-  `);
-  const agentId = (agentRows as any)[0]?.id;
-  if (!agentId) return;
-
-  const { randomUUID } = await import("node:crypto");
-  const taskId = randomUUID();
-  await db.execute(sql`
-    INSERT INTO tasks (id, tenant_id, title, description, status, priority, assignee_agent_id, origin_kind, created_at, updated_at)
-    VALUES (${taskId}, ${tenantId}, ${taskTitle}, ${taskDescription}, 'todo', 'medium', ${agentId}, ${taskOriginKind}, now(), now())
-  `);
-
-  const outcome = await agentEngineRef.wake({
-    agentId, tenantId, reason: "connector_event", taskId, payload,
-  });
-  if (outcome.kind === "created") {
-    await agentEngineRef.enqueue(outcome.wakeupRequestId);
-  }
-}
-
-// Event-driven: activate sync routines when Google is connected
-app.onEvent("connector.connected", async (event) => {
-  if (event.data.kind !== "google") return;
-  const db = dbRef as any;
-  if (!db) return;
-  const { sql } = await import("drizzle-orm");
-  // Unpause Google-dependent routines (email sync + calendar check)
-  await db.execute(sql`
-    UPDATE routines SET status = 'active'
-    WHERE tenant_id = ${event.tenantId}
-      AND (title LIKE '%Sync%' OR title LIKE '%Calendar Check%')
-      AND status = 'paused'
-  `).catch(() => {});
-});
-
-// Event-driven: dedup calendar events and wake Meeting Prep for new meetings
-app.onEvent("calendar.upcoming_events", async (event) => {
-  if (!agentEngineRef || !dbRef) return;
-  const db = dbRef as any;
-  const { sql } = await import("drizzle-orm");
-
-  let events: any[] = [];
-  try {
-    const raw = event.data.events;
-    events = typeof raw === "string" ? JSON.parse(raw) : Array.isArray(raw) ? raw : [];
-  } catch { return; }
-
-  if (events.length === 0) return;
-
-  // Filter to events within the next 60 minutes
-  const now = Date.now();
-  const oneHour = now + 60 * 60 * 1000;
-  const upcoming = events.filter((e: any) => {
-    const start = new Date(e.start?.dateTime ?? e.start?.date ?? "").getTime();
-    return start > now && start < oneHour;
-  });
-
-  if (upcoming.length === 0) return;
-
-  // Check which events already have prep tasks (dedup by event ID)
-  const eventIds = upcoming.map((e: any) => e.id).filter(Boolean);
-  const existingTasks = await db.execute(sql`
-    SELECT description FROM tasks
-    WHERE tenant_id = ${event.tenantId}
-      AND origin_kind = 'agent-meeting-prep'
-      AND status IN ('todo', 'in_progress', 'done')
-  `);
-  const preppedIds = new Set<string>();
-  for (const t of existingTasks as any[]) {
-    const desc = t.description ?? "";
-    for (const eid of eventIds) {
-      if (desc.includes(eid)) preppedIds.add(eid);
-    }
-  }
-
-  // Create tasks only for unprepped meetings
-  const newMeetings = upcoming.filter((e: any) => e.id && !preppedIds.has(e.id));
-  if (newMeetings.length === 0) return;
-
-  for (const meeting of newMeetings) {
-    const summary = meeting.summary ?? "Meeting";
-    const start = meeting.start?.dateTime ?? meeting.start?.date ?? "";
-    const attendees = (meeting.attendees ?? []).map((a: any) => a.email).join(", ");
-
-    await wakeAgentByRole(
-      "meeting-prep", event.tenantId,
-      `Meeting prep: ${summary}`,
-      `Prepare for meeting: ${summary}\nEvent ID: ${meeting.id}\nStart: ${start}\nAttendees: ${attendees}\nLocation: ${meeting.location ?? "N/A"}\nDescription: ${meeting.description ?? "N/A"}`,
-      "agent-meeting-prep",
-      { eventId: meeting.id, summary, start, attendees },
-    );
-  }
-});
-
-// Event-driven: wake Enrichment agent when new contacts/companies are created
-// Routes to role-specific agents (enrichment-contact / enrichment-company)
-// Falls back to legacy "enrichment" role for existing tenants
-app.onEvent("entity.created", async (event) => {
-  const { entityType, entityId } = event.data as { entityType: string; entityId: string };
-
-  if (entityType === "crm_contact" || entityType === "crm_company") {
-    const label = entityType === "crm_contact" ? "contact" : "company";
-    const role = entityType === "crm_contact" ? "enrichment-contact" : "enrichment-company";
-
-    // Try the new role-specific agent first, fall back to legacy "enrichment" role
-    await wakeAgentByRole(
-      role, event.tenantId,
-      `Enrich ${label}`,
-      `Research and enrich ${label}: ${entityId}\nEntity type: ${entityType}\nEntity ID: ${entityId}`,
-      "agent-enrichment",
-      event.data as Record<string, unknown>,
-    ).catch(() =>
-      wakeAgentByRole(
-        "enrichment", event.tenantId,
-        `Enrich ${label}`,
-        `Research and enrich ${label}: ${entityId}\nEntity type: ${entityType}\nEntity ID: ${entityId}`,
-        "agent-enrichment",
-        event.data as Record<string, unknown>,
-      )
-    );
-    return;
-  }
-
-  if (entityType === "crm_deal") {
-    await wakeAgentByRole(
-      "deal-analyst", event.tenantId,
-      "Analyze new deal",
-      `Analyze deal: ${entityId}\nThis is an event-driven wake for a single new deal. Produce agentIntelligence for just this deal and mark this task done.`,
-      "agent-deal-analysis",
-      event.data as Record<string, unknown>,
-    );
-    return;
-  }
-});
+// All connector-event dispatching now lives in system workflows seeded by
+// provisionCrmTenant — see tenant.ts step 10. The framework's event-dispatch
+// primitive matches incoming eventBus events against active workflows whose
+// trigger.config.eventType matches and fires every match in a microtask.
+//
+// Replaced (Phase 7b finish):
+//   inbox.item_created      → "Triage new inbox items" workflow
+//   connector.connected     → "Activate sync routines on Google connect" workflow
+//   calendar.upcoming_events → "Prep upcoming meetings" workflow
+//   entity.created          → "Enrich new contact" / "Enrich new company" / "Analyze new deal" workflows
 
 // CRM data routes
 app.beforeStart(async (ctx) => {
   dbRef = ctx.db;
-  agentEngineRef = ctx.agentEngine;
   const crmCtx = createCrmContext(
     ctx.db,
     (type, tenantId, data) => {
