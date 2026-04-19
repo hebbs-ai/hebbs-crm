@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useWorkflow, useWorkflowRuns, useExecuteWorkflow, useUpdateWorkflowStatus } from "../hooks/useWorkflows";
 import type { WorkflowRunStatus } from "../hooks/useWorkflows";
 import { WorkflowCanvas } from "../components/WorkflowCanvas";
@@ -79,10 +79,20 @@ export function WorkflowDetailPage() {
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelected, setCompareSelected] = useState<string[]>([]);
 
+  const navigate = useNavigate();
   const wf = useWorkflow(id);
   const runs = useWorkflowRuns(id);
   const execute = useExecuteWorkflow();
   const updateStatus = useUpdateWorkflowStatus();
+
+  // Auto-navigate to the new run detail so the user lands on the live SSE
+  // view instead of having to click a "Run started" link. The execute
+  // endpoint returns immediately with the runId now (background mode).
+  async function handleRun() {
+    if (!workflow) return;
+    const res = await execute.mutateAsync({ id: workflow.id });
+    if (res.runId) navigate(`/workflows/${workflow.id}/runs/${res.runId}`);
+  }
 
   if (wf.isLoading) return <div className="p-6 text-sm text-text-secondary">Loading…</div>;
   if (!wf.data) return <div className="p-6 text-sm text-text-secondary">Workflow not found</div>;
@@ -117,11 +127,11 @@ export function WorkflowDetailPage() {
               Edit
             </Link>
             <button
-              onClick={() => execute.mutate({ id: workflow.id })}
+              onClick={handleRun}
               disabled={execute.isPending || workflow.status === "archived"}
               className="px-3 py-1.5 text-sm bg-accent text-white rounded-md hover:opacity-90 disabled:opacity-50"
             >
-              {execute.isPending ? "Running…" : "Run now"}
+              {execute.isPending ? "Starting…" : "Run now"}
             </button>
             {workflow.status === "active" && (
               <button
@@ -142,12 +152,6 @@ export function WorkflowDetailPage() {
           </div>
         </header>
 
-        {execute.isSuccess && execute.data?.runId && (
-          <div className="mb-4 p-3 rounded-md border border-border bg-bg-secondary text-sm">
-            Run started: <Link to={`/workflows/${workflow.id}/runs/${execute.data.runId}`} className="text-accent hover:underline font-mono">{execute.data.runId.slice(0, 8)}</Link>
-            {" "}({execute.data.status})
-          </div>
-        )}
 
         {/* Tabs */}
         <div className="flex items-center gap-1 border-b border-border mb-4">
