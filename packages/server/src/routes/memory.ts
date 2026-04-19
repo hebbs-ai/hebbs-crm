@@ -211,13 +211,22 @@ export function createMemoryRoutes(ctx: CrmContext) {
 
     const content = new Uint8Array(await file.arrayBuffer());
 
-    // Build Hebbs path: {tenantId}/entities/{entityScope}/{filename}
-    // entityScope: "org" for Knowledge Base, "contact-{id}" for contacts, etc.
-    let entityScope = "org";
-    if (entityType && entityId) {
-      entityScope = `${entityType}-${entityId}`;
-    }
-    const remotePath = `${tenantId}/entities/${entityScope}/${file.name}`;
+    // Build Hebbs path. Entity-scoped files go to `entities/{type}-{id}/`
+    // because Hebbs's entity recall (`hebbs recall --entity-id X`) only
+    // recognizes files at that path shape. Anything we put under a tenant
+    // prefix gets indexed as a plain document and isn't associated with
+    // the entity, so agents can't surface it via prime/recall by entity.
+    //
+    // Tenant isolation is enforced at the Hebbs *workspace* level
+    // (endpoint + api_key per tenant in tenant_settings), so dropping the
+    // path prefix doesn't mix tenants — different tenants land in
+    // different vaults regardless of what the paths look like inside.
+    //
+    // Entity IDs are UUIDs, so paths are globally unique even without the
+    // prefix. Org-level files go under `org/` for vault tidiness.
+    const remotePath = entityType && entityId
+      ? `entities/${entityType}-${entityId}/${file.name}`
+      : `org/${file.name}`;
 
     // Upload to Hebbs
     try {
