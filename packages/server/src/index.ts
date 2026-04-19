@@ -9,7 +9,14 @@ import { createCrmUserContextProvider } from "./context-providers/crm-user-conte
 import { createCrmMemoryProvider } from "./context-providers/crm-memory.js";
 import { createCompanyProfileProvider } from "./context-providers/crm-company-profile.js";
 
-const app = new BoringOS({});
+const app = new BoringOS({
+  // Default to 4 parallel agent runs; tune via AGENT_QUEUE_CONCURRENCY env
+  // var. Each slot spawns its own agent subprocess, so raise with care
+  // (RAM, Anthropic rate limits, Postgres pool).
+  queue: {
+    concurrency: Number(process.env.AGENT_QUEUE_CONCURRENCY ?? 4),
+  },
+});
 
 // Register connectors
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {

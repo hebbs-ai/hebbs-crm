@@ -119,6 +119,12 @@ cd packages/web && pnpm dev
 pnpm -r build
 ```
 
+### Environment variables
+
+| Var | Default | Effect |
+|---|---|---|
+| `AGENT_QUEUE_CONCURRENCY` | `4` | Max agent runs executed in parallel by the in-process queue. Each slot spawns its own agent subprocess — raise with care (RAM, Anthropic rate limits, Postgres pool). Ops-level knob, not user-facing. |
+
 ## Deployed
 
 - Frontend: https://crm.boringos.dev
