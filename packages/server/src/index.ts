@@ -8,6 +8,7 @@ import { crmAgentDocs } from "./context-providers/crm-schema.js";
 import { createCrmUserContextProvider } from "./context-providers/crm-user-context.js";
 import { createCrmMemoryProvider } from "./context-providers/crm-memory.js";
 import { createCompanyProfileProvider } from "./context-providers/crm-company-profile.js";
+import { crmCopilotDisciplineProvider } from "./context-providers/crm-copilot-discipline.js";
 
 const app = new BoringOS({
   // Default to 4 parallel agent runs; tune via AGENT_QUEUE_CONCURRENCY env
@@ -153,6 +154,7 @@ let dbRef: unknown = null;
 app.contextProvider(createCompanyProfileProvider(() => dbRef));
 app.contextProvider(createCrmUserContextProvider(() => dbRef));
 app.contextProvider(createCrmMemoryProvider(() => dbRef));
+app.contextProvider(crmCopilotDisciplineProvider);
 
 // When a new tenant signs up, create the default sales pipeline + agents
 app.onTenantCreated(async (db, tenantId) => {
