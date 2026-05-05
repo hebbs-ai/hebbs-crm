@@ -10,17 +10,18 @@
   },
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit",
-    "dev": "tsx watch --env-file=../../.env src/index.ts"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hebbs/sdk": "link:../../../../research/hebbs-repos/hebbs-typescript",
-    "@boringos/agent": "link:../../../boringos/packages/@boringos/agent",
-    "@boringos/connector-google": "link:../../../boringos/packages/@boringos/connector-google",
-    "@boringos/connector-slack": "link:../../../boringos/packages/@boringos/connector-slack",
-    "@boringos/core": "link:../../../boringos/packages/@boringos/core",
-    "@boringos/db": "link:../../../boringos/packages/@boringos/db",
-    "@boringos/shared": "link:../../../boringos/packages/@boringos/shared",
+    "@hebbs/sdk": "link:../../../../hebbs-repos/hebbs-typescript",
+    "@boringos/agent": "link:../../../boringos-framework/packages/@boringos/agent",
+    "@boringos/app-sdk": "link:../../../boringos-framework/packages/@boringos/app-sdk",
+    "@boringos/connector-google": "link:../../../boringos-framework/packages/@boringos/connector-google",
+    "@boringos/connector-slack": "link:../../../boringos-framework/packages/@boringos/connector-slack",
+    "@boringos/control-plane": "link:../../../boringos-framework/packages/@boringos/control-plane",
+    "@boringos/core": "link:../../../boringos-framework/packages/@boringos/core",
+    "@boringos/db": "link:../../../boringos-framework/packages/@boringos/db",
+    "@boringos/shared": "link:../../../boringos-framework/packages/@boringos/shared",
     "@boringos-crm/shared": "workspace:*",
     "drizzle-orm": "^0.41.0",
     "hono": "^4.7.0"

@@ -21,26 +21,32 @@ importers:
         specifier: workspace:*
         version: link:../shared
       '@boringos/agent':
-        specifier: link:../../../boringos/packages/@boringos/agent
-        version: link:../../../boringos/packages/@boringos/agent
+        specifier: link:../../../boringos-framework/packages/@boringos/agent
+        version: link:../../../boringos-framework/packages/@boringos/agent
+      '@boringos/app-sdk':
+        specifier: link:../../../boringos-framework/packages/@boringos/app-sdk
+        version: link:../../../boringos-framework/packages/@boringos/app-sdk
       '@boringos/connector-google':
-        specifier: link:../../../boringos/packages/@boringos/connector-google
-        version: link:../../../boringos/packages/@boringos/connector-google
+        specifier: link:../../../boringos-framework/packages/@boringos/connector-google
+        version: link:../../../boringos-framework/packages/@boringos/connector-google
       '@boringos/connector-slack':
-        specifier: link:../../../boringos/packages/@boringos/connector-slack
-        version: link:../../../boringos/packages/@boringos/connector-slack
+        specifier: link:../../../boringos-framework/packages/@boringos/connector-slack
+        version: link:../../../boringos-framework/packages/@boringos/connector-slack
+      '@boringos/control-plane':
+        specifier: link:../../../boringos-framework/packages/@boringos/control-plane
+        version: link:../../../boringos-framework/packages/@boringos/control-plane
       '@boringos/core':
-        specifier: link:../../../boringos/packages/@boringos/core
-        version: link:../../../boringos/packages/@boringos/core
+        specifier: link:../../../boringos-framework/packages/@boringos/core
+        version: link:../../../boringos-framework/packages/@boringos/core
       '@boringos/db':
-        specifier: link:../../../boringos/packages/@boringos/db
-        version: link:../../../boringos/packages/@boringos/db
+        specifier: link:../../../boringos-framework/packages/@boringos/db
+        version: link:../../../boringos-framework/packages/@boringos/db
       '@boringos/shared':
-        specifier: link:../../../boringos/packages/@boringos/shared
-        version: link:../../../boringos/packages/@boringos/shared
+        specifier: link:../../../boringos-framework/packages/@boringos/shared
+        version: link:../../../boringos-framework/packages/@boringos/shared
       '@hebbs/sdk':
-        specifier: link:../../../../research/hebbs-repos/hebbs-typescript
-        version: link:../../../../research/hebbs-repos/hebbs-typescript
+        specifier: link:../../../../hebbs-repos/hebbs-typescript
+        version: link:../../../../hebbs-repos/hebbs-typescript
       drizzle-orm:
         specifier: ^0.41.0
         version: 0.41.0
@@ -69,9 +75,12 @@ importers:
       '@boringos-crm/shared':
         specifier: workspace:*
         version: link:../shared
+      '@boringos/app-sdk':
+        specifier: link:../../../boringos-framework/packages/@boringos/app-sdk
+        version: link:../../../boringos-framework/packages/@boringos/app-sdk
       '@boringos/workflow-ui':
-        specifier: link:../../../boringos/packages/@boringos/workflow-ui
-        version: link:../../../boringos/packages/@boringos/workflow-ui
+        specifier: link:../../../boringos-framework/packages/@boringos/workflow-ui
+        version: link:../../../boringos-framework/packages/@boringos/workflow-ui
       '@dagrejs/dagre':
         specifier: ^3.0.0
         version: 3.0.0

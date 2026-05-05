@@ -126,41 +126,43 @@ export async function provisionCrmTenant(db: PostgresJsDatabase, tenantId: strin
     `);
   }
 
-  // 5. Create Email Triage agent + event-triggered workflow that wakes it
+  // 5. Create CRM Email Lens agent + event-triggered workflow that wakes
+  //    it on triage.classified. Generic-triage owns classification +
+  //    score; the lens layers CRM-specific contact/deal interpretation
+  //    on top. See L10.
   try {
-    const { EMAIL_TRIAGE_INSTRUCTIONS } = await import("./agents/email-triage.js");
+    const { EMAIL_LENS_INSTRUCTIONS } = await import("./agents/email-lens.js");
     const rtResult = await db.execute(sql`
       SELECT id FROM runtimes WHERE tenant_id = ${tenantId} AND type = 'claude' LIMIT 1
     `);
     const runtimeId = (rtResult as unknown as Array<{ id: string }>)[0]?.id;
     if (runtimeId) {
-      const emailTriageAgentId = randomUUID();
+      const emailLensAgentId = randomUUID();
       await db.execute(sql`
         INSERT INTO agents (id, tenant_id, name, role, status, instructions, runtime_id, created_at, updated_at)
-        VALUES (${emailTriageAgentId}, ${tenantId}, 'Email Triage', 'email-triage', 'idle',
-          ${EMAIL_TRIAGE_INSTRUCTIONS}, ${runtimeId}, now(), now())
+        VALUES (${emailLensAgentId}, ${tenantId}, 'CRM Email Lens', 'email-lens', 'idle',
+          ${EMAIL_LENS_INSTRUCTIONS}, ${runtimeId}, now(), now())
       `);
 
-      // Replaces the previous inline `app.onEvent("inbox.item_created")` hand-
-      // rolled dispatch. The framework's event-dispatch primitive picks up
-      // any active workflow whose trigger.eventType matches the incoming
-      // event and executes it with the event payload. One wake per batch —
-      // the agent's wake-coalescing keeps things from piling up.
-      const triageWfBlocks = [
-        { id: "trigger", name: "trigger", type: "trigger", config: { eventType: "inbox.item_created" } },
-        { id: "wake", name: "wake", type: "wake-agent", config: { agentId: emailTriageAgentId, reason: "inbox_item_created" } },
+      // Subscribes to triage.classified — the event generic-triage
+      // emits after writing metadata.triage. The framework's
+      // event-dispatch primitive picks up any active workflow whose
+      // trigger.eventType matches the incoming event.
+      const lensWfBlocks = [
+        { id: "trigger", name: "trigger", type: "trigger", config: { eventType: "triage.classified" } },
+        { id: "wake", name: "wake", type: "wake-agent", config: { agentId: emailLensAgentId, reason: "triage_classified" } },
       ];
-      const triageWfEdges = [
+      const lensWfEdges = [
         { id: "e1", sourceBlockId: "trigger", targetBlockId: "wake", sourceHandle: null, sortOrder: 0 },
       ];
       await db.execute(sql`
         INSERT INTO workflows (id, tenant_id, name, type, status, blocks, edges, created_at, updated_at)
-        VALUES (${randomUUID()}, ${tenantId}, 'Triage new inbox items', 'system', 'active',
-          ${JSON.stringify(triageWfBlocks)}::jsonb, ${JSON.stringify(triageWfEdges)}::jsonb, now(), now())
+        VALUES (${randomUUID()}, ${tenantId}, 'CRM lens on classified inbox items', 'system', 'active',
+          ${JSON.stringify(lensWfBlocks)}::jsonb, ${JSON.stringify(lensWfEdges)}::jsonb, now(), now())
       `);
     }
   } catch (err) {
-    console.warn(`[tenant] Failed to create Email Triage agent:`, err);
+    console.warn(`[tenant] Failed to create CRM Email Lens agent:`, err);
   }
 
   // 6. Create Enrichment agents (contact + company dossier)
