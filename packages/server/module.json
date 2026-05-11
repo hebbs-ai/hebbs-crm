@@ -5,7 +5,10 @@
   "description": "Sales CRM — contacts, companies, deals, pipelines, activities. Ships specialised agents for triage, enrichment, deal analysis, follow-up writing, and meeting prep.",
   "kind": "module",
   "entry": "./index.mjs",
-  "ui": { "entry": "./ui/index.mjs" },
+  "ui": {
+    "entry": "./ui/index.mjs",
+    "sourcePath": "../web/dist"
+  },
   "dependsOn": [
     { "capability": "email-send", "optional": true },
     { "capability": "file-storage", "optional": true }
