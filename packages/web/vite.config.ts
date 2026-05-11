@@ -50,9 +50,22 @@ export default defineConfig({
       output: {
         // Keep the entry filename stable so module.json's ui.entry
         // can point at "./ui/index.mjs" without rewriting it every
-        // build.
+        // build. The CSS bundle gets a stable `index.css` name too
+        // so the shell's runtime-loader can fetch it at a
+        // predictable sibling path without parsing the JS bundle
+        // for asset refs.
         entryFileNames: "index.mjs",
-        assetFileNames: "assets/[name]-[hash][extname]",
+        assetFileNames: (info) => {
+          // Vite tags the entry CSS as `style.css` by default in
+          // lib mode; rename to `index.css` so the shell can
+          // GET /modules/<id>/ui/index.css. Other assets (fonts,
+          // images) keep the hashed `/assets/` prefix.
+          const name = info.name ?? "";
+          if (name === "style.css" || name.endsWith(".css")) {
+            return "index.css";
+          }
+          return "assets/[name]-[hash][extname]";
+        },
         chunkFileNames: "assets/[name]-[hash].js",
       },
     },

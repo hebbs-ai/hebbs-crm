@@ -6,6 +6,14 @@
 // modules.config.ts. Each contribution becomes a real Route /
 // sidebar entry / entity panel / settings panel, gated per-tenant
 // by useInstalledModules() (set by the framework's install-manager).
+//
+// Side-effect import of the CRM stylesheet — Vite library mode
+// only emits a CSS asset if something in the entry graph imports
+// CSS. The shell's runtime-loader injects /modules/crm/ui/index.css
+// as a <link> when the bundle registers, so Tailwind utilities
+// (incl. @theme tokens) ship with the bundle.
+
+import "./index.css";
 
 import type { PluginUI } from "@boringos/ui";
 
