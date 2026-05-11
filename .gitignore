@@ -7,3 +7,7 @@ dist
 .vite
 .data
 docs/
+
+# Local working notes / planning docs that shouldn't ship.
+UI_PORT_PLAN.md
+*_PLAN.md
