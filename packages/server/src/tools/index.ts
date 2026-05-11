@@ -1,0 +1,33 @@
+// Aggregates every CRM tool factory. Each entity-specific file
+// exports a `create<Group>Tools(deps): Tool[]` function; this
+// module flattens them into a single array passed to
+// `Module.tools` in module.ts.
+//
+// Tool dispatch URL pattern: /api/tools/crm.<group>.<verb>
+//   crm.contacts.list, crm.deals.update, crm.inbox.reply, etc.
+
+import type { Tool } from "@boringos/module-sdk";
+import { createContactTools } from "./contacts.js";
+import { createCompanyTools } from "./companies.js";
+import { createDealTools } from "./deals.js";
+import { createPipelineTools } from "./pipelines.js";
+import { createActivityTools } from "./activities.js";
+import { createInboxTools } from "./inbox.js";
+import { createMemoryTools } from "./memory.js";
+import { createProfileTools } from "./profile.js";
+import { createActionTools } from "./actions.js";
+import type { CrmDeps } from "./deps.js";
+
+export function createCrmTools(deps: CrmDeps): Tool[] {
+  return [
+    ...createContactTools(deps),
+    ...createCompanyTools(deps),
+    ...createDealTools(deps),
+    ...createPipelineTools(deps),
+    ...createActivityTools(deps),
+    ...createInboxTools(deps),
+    ...createMemoryTools(deps),
+    ...createProfileTools(deps),
+    ...createActionTools(deps),
+  ];
+}

@@ -1,14 +1,14 @@
 import { sql } from "drizzle-orm";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { GmailClient, CalendarClient } from "@boringos/connector-google";
-import type { CrmContext } from "./context.js";
 
 /**
  * Resolve a fresh Google access token for the tenant. Refreshes via the
- * stored refresh token and persists the new access token. Used by both the
- * inbox routes (Gmail thread/reply/archive) and the actions executor
+ * stored refresh token and persists the new access token. Used by the
+ * inbox tools (Gmail thread/reply/archive/sync) and the actions executor
  * (reply / schedule_meeting kinds).
  */
-async function refreshAccessToken(db: CrmContext["db"], tenantId: string): Promise<string | null> {
+async function refreshAccessToken(db: PostgresJsDatabase, tenantId: string): Promise<string | null> {
   const rows = await db.execute(sql`
     SELECT id, credentials FROM connectors
     WHERE tenant_id = ${tenantId} AND kind = 'google'
@@ -50,7 +50,7 @@ async function refreshAccessToken(db: CrmContext["db"], tenantId: string): Promi
 }
 
 export async function getGmailClient(
-  db: CrmContext["db"],
+  db: PostgresJsDatabase,
   tenantId: string,
 ): Promise<{ gmail: GmailClient; error?: string } | { gmail?: undefined; error: string }> {
   const token = await refreshAccessToken(db, tenantId);
@@ -59,7 +59,7 @@ export async function getGmailClient(
 }
 
 export async function getCalendarClient(
-  db: CrmContext["db"],
+  db: PostgresJsDatabase,
   tenantId: string,
 ): Promise<{ calendar: CalendarClient; error?: string } | { calendar?: undefined; error: string }> {
   const token = await refreshAccessToken(db, tenantId);

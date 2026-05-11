@@ -2,7 +2,7 @@ import { pgTable, uuid, text, timestamp, jsonb, index } from "drizzle-orm/pg-cor
 import type { ActivityType } from "@boringos-crm/shared";
 
 export const activities = pgTable(
-  "crm_activities",
+  "crm__activities",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
@@ -28,17 +28,17 @@ export const activities = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    tenantIdx: index("crm_activities_tenant_idx").on(table.tenantId),
-    contactIdx: index("crm_activities_contact_idx").on(
+    tenantIdx: index("crm__activities_tenant_idx").on(table.tenantId),
+    contactIdx: index("crm__activities_contact_idx").on(
       table.tenantId,
       table.contactId
     ),
-    dealIdx: index("crm_activities_deal_idx").on(table.tenantId, table.dealId),
-    companyIdx: index("crm_activities_company_idx").on(
+    dealIdx: index("crm__activities_deal_idx").on(table.tenantId, table.dealId),
+    companyIdx: index("crm__activities_company_idx").on(
       table.tenantId,
       table.companyId
     ),
-    userIdx: index("crm_activities_user_idx").on(table.tenantId, table.userId),
-    occurredIdx: index("crm_activities_occurred_idx").on(table.occurredAt),
+    userIdx: index("crm__activities_user_idx").on(table.tenantId, table.userId),
+    occurredIdx: index("crm__activities_occurred_idx").on(table.occurredAt),
   })
 );

@@ -23,24 +23,21 @@ importers:
       '@boringos/agent':
         specifier: link:../../../boringos-framework/packages/@boringos/agent
         version: link:../../../boringos-framework/packages/@boringos/agent
-      '@boringos/app-sdk':
-        specifier: link:../../../boringos-framework/packages/@boringos/app-sdk
-        version: link:../../../boringos-framework/packages/@boringos/app-sdk
       '@boringos/connector-google':
         specifier: link:../../../boringos-framework/packages/@boringos/connector-google
         version: link:../../../boringos-framework/packages/@boringos/connector-google
       '@boringos/connector-slack':
         specifier: link:../../../boringos-framework/packages/@boringos/connector-slack
         version: link:../../../boringos-framework/packages/@boringos/connector-slack
-      '@boringos/control-plane':
-        specifier: link:../../../boringos-framework/packages/@boringos/control-plane
-        version: link:../../../boringos-framework/packages/@boringos/control-plane
       '@boringos/core':
         specifier: link:../../../boringos-framework/packages/@boringos/core
         version: link:../../../boringos-framework/packages/@boringos/core
       '@boringos/db':
         specifier: link:../../../boringos-framework/packages/@boringos/db
         version: link:../../../boringos-framework/packages/@boringos/db
+      '@boringos/module-sdk':
+        specifier: link:../../../boringos-framework/packages/@boringos/module-sdk
+        version: link:../../../boringos-framework/packages/@boringos/module-sdk
       '@boringos/shared':
         specifier: link:../../../boringos-framework/packages/@boringos/shared
         version: link:../../../boringos-framework/packages/@boringos/shared
@@ -75,9 +72,9 @@ importers:
       '@boringos-crm/shared':
         specifier: workspace:*
         version: link:../shared
-      '@boringos/app-sdk':
-        specifier: link:../../../boringos-framework/packages/@boringos/app-sdk
-        version: link:../../../boringos-framework/packages/@boringos/app-sdk
+      '@boringos/ui':
+        specifier: link:../../../boringos-framework/packages/@boringos/ui
+        version: link:../../../boringos-framework/packages/@boringos/ui
       '@boringos/workflow-ui':
         specifier: link:../../../boringos-framework/packages/@boringos/workflow-ui
         version: link:../../../boringos-framework/packages/@boringos/workflow-ui

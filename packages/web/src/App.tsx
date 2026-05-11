@@ -17,10 +17,6 @@ import { KnowledgeBasePage } from "./pages/KnowledgeBase";
 import { InboxPage } from "./pages/Inbox";
 import { ActionsPage } from "./pages/Actions";
 import { AgentsPage } from "./pages/Agents";
-import { WorkflowsPage } from "./pages/Workflows";
-import { WorkflowDetailPage } from "./pages/WorkflowDetail";
-import { WorkflowRunDetailPage } from "./pages/WorkflowRunDetail";
-import { WorkflowEditorPage } from "./pages/WorkflowEditor";
 import { LoginPage } from "./pages/Login";
 import { SignupPage } from "./pages/Signup";
 import type { ReactNode } from "react";
@@ -79,10 +75,6 @@ function AppRoutes() {
         <Route path="tasks/:id" element={<TaskDetailPage />} />
         <Route path="knowledge" element={<KnowledgeBasePage />} />
         <Route path="agents" element={<AgentsPage />} />
-        <Route path="workflows" element={<WorkflowsPage />} />
-        <Route path="workflows/:id" element={<WorkflowDetailPage />} />
-        <Route path="workflows/:id/edit" element={<WorkflowEditorPage />} />
-        <Route path="workflows/:id/runs/:runId" element={<WorkflowRunDetailPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/:tab" element={<SettingsPage />} />
       </Route>

@@ -1,23 +1,39 @@
 // SPDX-License-Identifier: BUSL-1.1
 //
-// L8 — EntityAction slot contributions for `crm_deal`.
+// EntityAction slot contributions for `crm_deal`. Mounted into the
+// shell's per-entity action menu via `crmUI.entityActions` in ui.ts.
 //
-// Each action is a typed `EntityAction<"crm_deal">` whose `invoke`
-// receives the framework's `ActionContext` (db, log, emit). Wakes are
-// performed via the framework's admin API rather than direct engine
-// calls so the same handler runs from the shell, the copilot, or a
-// programmatic tenant runtime.
+// Each action is invoked by the shell with the focused entity and a
+// minimal `ActionContext` (logger + emit). We keep these
+// browser-side and side-effect-free at the network layer: actions
+// emit framework events via `ctx.emit`, and a host-side workflow
+// dispatches the actual agent wake. That keeps the shell from
+// needing to know which agent to wake for which action.
 
-import type { ActionContext, Entity, EntityAction } from "@boringos/app-sdk";
+interface DealEntity {
+  id: string;
+  fields: Record<string, unknown>;
+}
 
-type Deal = Entity<"crm_deal">;
+interface ActionContext {
+  log: { info: (msg: string, data?: Record<string, unknown>) => void };
+  emit: (eventType: string, data: Record<string, unknown>) => Promise<void> | void;
+}
 
-async function wakeAgent(ctx: ActionContext, agentRole: string, reason: string, taskTitle: string) {
-  // Framework admin API: agents and tasks live at /api/admin/* on the
-  // host. The ActionContext doesn't expose the callback URL, so we
-  // emit an event instead and let a workflow on the host dispatch the
-  // agent. This keeps the slot contribution side-effect free at the
-  // browser layer.
+export interface EntityActionDef {
+  id: string;
+  entity: string;
+  label: string;
+  visible?: (entity: DealEntity) => boolean;
+  invoke: (entity: DealEntity, ctx: ActionContext) => Promise<void>;
+}
+
+async function wakeAgent(
+  ctx: ActionContext,
+  agentRole: string,
+  reason: string,
+  taskTitle: string,
+) {
   await ctx.emit("crm.deal.action_invoked", {
     agentRole,
     reason,
@@ -25,11 +41,11 @@ async function wakeAgent(ctx: ActionContext, agentRole: string, reason: string, 
   });
 }
 
-export const sendFollowup: EntityAction<"crm_deal"> = {
+export const sendFollowup: EntityActionDef = {
   id: "send-followup",
   entity: "crm_deal",
   label: "Send follow-up",
-  async invoke(deal: Deal, ctx: ActionContext) {
+  async invoke(deal, ctx) {
     ctx.log.info("crm.deal: send follow-up", { dealId: deal.id });
     await wakeAgent(
       ctx,
@@ -40,11 +56,11 @@ export const sendFollowup: EntityAction<"crm_deal"> = {
   },
 };
 
-export const runAnalyst: EntityAction<"crm_deal"> = {
+export const runAnalyst: EntityActionDef = {
   id: "run-analyst",
   entity: "crm_deal",
   label: "Run analyst",
-  async invoke(deal: Deal, ctx: ActionContext) {
+  async invoke(deal, ctx) {
     ctx.log.info("crm.deal: run analyst", { dealId: deal.id });
     await wakeAgent(
       ctx,
@@ -55,12 +71,12 @@ export const runAnalyst: EntityAction<"crm_deal"> = {
   },
 };
 
-export const markWon: EntityAction<"crm_deal"> = {
+export const markWon: EntityActionDef = {
   id: "mark-won",
   entity: "crm_deal",
   label: "Mark won",
   visible: (d) => (d.fields.stageType as string | undefined) !== "won",
-  async invoke(deal: Deal, ctx: ActionContext) {
+  async invoke(deal, ctx) {
     ctx.log.info("crm.deal: mark won", { dealId: deal.id });
     await ctx.emit("crm.deal.stage_changed", {
       dealId: deal.id,
@@ -69,12 +85,12 @@ export const markWon: EntityAction<"crm_deal"> = {
   },
 };
 
-export const markLost: EntityAction<"crm_deal"> = {
+export const markLost: EntityActionDef = {
   id: "mark-lost",
   entity: "crm_deal",
   label: "Mark lost",
   visible: (d) => (d.fields.stageType as string | undefined) !== "lost",
-  async invoke(deal: Deal, ctx: ActionContext) {
+  async invoke(deal, ctx) {
     ctx.log.info("crm.deal: mark lost", { dealId: deal.id });
     await ctx.emit("crm.deal.stage_changed", {
       dealId: deal.id,

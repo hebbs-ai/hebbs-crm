@@ -3,13 +3,21 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "main": "./src/ui.ts",
+  "types": "./src/ui.ts",
+  "exports": {
+    ".": {
+      "types": "./src/ui.ts",
+      "import": "./src/ui.ts"
+    }
+  },
   "scripts": {
     "build": "tsc -b && vite build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@boringos-crm/shared": "workspace:*",
-    "@boringos/app-sdk": "link:../../../boringos-framework/packages/@boringos/app-sdk",
+    "@boringos/ui": "link:../../../boringos-framework/packages/@boringos/ui",
     "@boringos/workflow-ui": "link:../../../boringos-framework/packages/@boringos/workflow-ui",
     "@dagrejs/dagre": "^3.0.0",
     "@tanstack/react-query": "^5.0.0",

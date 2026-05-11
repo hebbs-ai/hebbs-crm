@@ -1,7 +1,7 @@
 import { pgTable, uuid, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 
 export const contacts = pgTable(
-  "crm_contacts",
+  "crm__contacts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
@@ -27,12 +27,12 @@ export const contacts = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    tenantIdx: index("crm_contacts_tenant_idx").on(table.tenantId),
-    ownerIdx: index("crm_contacts_owner_idx").on(table.tenantId, table.ownerId),
-    companyIdx: index("crm_contacts_company_idx").on(
+    tenantIdx: index("crm__contacts_tenant_idx").on(table.tenantId),
+    ownerIdx: index("crm__contacts_owner_idx").on(table.tenantId, table.ownerId),
+    companyIdx: index("crm__contacts_company_idx").on(
       table.tenantId,
       table.companyId
     ),
-    emailIdx: index("crm_contacts_email_idx").on(table.tenantId, table.email),
+    emailIdx: index("crm__contacts_email_idx").on(table.tenantId, table.email),
   })
 );

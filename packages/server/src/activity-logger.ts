@@ -13,15 +13,15 @@ interface LogOpts {
 }
 
 export async function logActivity(opts: LogOpts) {
-  // Use raw SQL to avoid Drizzle type strictness issues with nullable fields
+  // Raw SQL — never fail the parent tool call.
   await opts.db.execute(sql`
-    INSERT INTO crm_activities (tenant_id, type, subject, body, contact_id, deal_id, company_id, user_id, occurred_at)
+    INSERT INTO crm__activities (tenant_id, type, subject, body, contact_id, deal_id, company_id, user_id, occurred_at)
     VALUES (
       ${opts.tenantId}, 'note', ${opts.subject}, ${opts.body ?? null},
       ${opts.contactId ?? null}, ${opts.dealId ?? null}, ${opts.companyId ?? null},
       ${opts.userId ?? opts.tenantId}, now()
     )
-  `).catch(() => {}); // never fail the parent request
+  `).catch(() => {});
 }
 
 /**

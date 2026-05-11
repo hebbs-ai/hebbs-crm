@@ -1,7 +1,7 @@
 import { pgTable, uuid, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 
 export const companies = pgTable(
-  "crm_companies",
+  "crm__companies",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
@@ -24,12 +24,12 @@ export const companies = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    tenantIdx: index("crm_companies_tenant_idx").on(table.tenantId),
-    ownerIdx: index("crm_companies_owner_idx").on(
+    tenantIdx: index("crm__companies_tenant_idx").on(table.tenantId),
+    ownerIdx: index("crm__companies_owner_idx").on(
       table.tenantId,
       table.ownerId
     ),
-    domainIdx: index("crm_companies_domain_idx").on(
+    domainIdx: index("crm__companies_domain_idx").on(
       table.tenantId,
       table.domain
     ),

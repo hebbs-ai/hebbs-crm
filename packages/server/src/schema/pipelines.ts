@@ -10,7 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const pipelines = pgTable(
-  "crm_pipelines",
+  "crm__pipelines",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
@@ -24,12 +24,12 @@ export const pipelines = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    tenantIdx: index("crm_pipelines_tenant_idx").on(table.tenantId),
+    tenantIdx: index("crm__pipelines_tenant_idx").on(table.tenantId),
   })
 );
 
 export const pipelineStages = pgTable(
-  "crm_pipeline_stages",
+  "crm__pipeline_stages",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     pipelineId: uuid("pipeline_id").notNull(),
@@ -45,8 +45,8 @@ export const pipelineStages = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    pipelineIdx: index("crm_stages_pipeline_idx").on(table.pipelineId),
-    sortIdx: index("crm_stages_sort_idx").on(
+    pipelineIdx: index("crm__stages_pipeline_idx").on(table.pipelineId),
+    sortIdx: index("crm__stages_sort_idx").on(
       table.pipelineId,
       table.sortOrder
     ),

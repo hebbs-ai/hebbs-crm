@@ -9,16 +9,16 @@
     ".": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && pnpm postbuild",
+    "postbuild": "node -e \"const{cpSync}=require('node:fs');cpSync('src/skills','dist/skills',{recursive:true})\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hebbs/sdk": "link:../../../../hebbs-repos/hebbs-typescript",
     "@boringos/agent": "link:../../../boringos-framework/packages/@boringos/agent",
-    "@boringos/app-sdk": "link:../../../boringos-framework/packages/@boringos/app-sdk",
+    "@boringos/module-sdk": "link:../../../boringos-framework/packages/@boringos/module-sdk",
     "@boringos/connector-google": "link:../../../boringos-framework/packages/@boringos/connector-google",
     "@boringos/connector-slack": "link:../../../boringos-framework/packages/@boringos/connector-slack",
-    "@boringos/control-plane": "link:../../../boringos-framework/packages/@boringos/control-plane",
     "@boringos/core": "link:../../../boringos-framework/packages/@boringos/core",
     "@boringos/db": "link:../../../boringos-framework/packages/@boringos/db",
     "@boringos/shared": "link:../../../boringos-framework/packages/@boringos/shared",
