@@ -134,23 +134,11 @@ const init: Migration = {
     await db.execute(`CREATE INDEX IF NOT EXISTS crm__activities_user_idx ON crm__activities(tenant_id, user_id);`);
     await db.execute(`CREATE INDEX IF NOT EXISTS crm__activities_occurred_idx ON crm__activities(occurred_at);`);
 
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS crm__knowledge_files (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        tenant_id uuid NOT NULL,
-        name text NOT NULL,
-        size integer NOT NULL DEFAULT 0,
-        status text NOT NULL DEFAULT 'pending',
-        remote_path text NOT NULL,
-        entity_type text,
-        entity_id uuid,
-        created_at timestamptz NOT NULL DEFAULT now()
-      );
-    `);
-    await db.execute(`CREATE INDEX IF NOT EXISTS crm__knowledge_files_tenant_idx ON crm__knowledge_files(tenant_id);`);
-    await db.execute(`CREATE INDEX IF NOT EXISTS crm__knowledge_files_entity_idx ON crm__knowledge_files(tenant_id, entity_type, entity_id);`);
   },
   async down(db) {
+    // crm__knowledge_files was dropped in 003-drop-knowledge-files (U6) —
+    // CASCADE here to clean up older installs whose 003 migration was
+    // skipped because 001 already ran without it.
     await db.execute(`DROP TABLE IF EXISTS crm__knowledge_files CASCADE;`);
     await db.execute(`DROP TABLE IF EXISTS crm__activities CASCADE;`);
     await db.execute(`DROP TABLE IF EXISTS crm__deals CASCADE;`);
@@ -179,4 +167,24 @@ const dedupeCompanyDomain: Migration = {
   },
 };
 
-export const crmMigrations: Migration[] = [init, dedupeCompanyDomain];
+// U6 cleanup: drop the legacy crm__knowledge_files table on any tenant
+// that previously ran the v0.1 / v0.2 init migration. New installs never
+// create the table (it's been removed from `init` above), but existing
+// tenants need this idempotent drop to clean up after the unwind.
+const dropKnowledgeFiles: Migration = {
+  id: "003-drop-knowledge-files",
+  async up(db) {
+    await db.execute(`DROP TABLE IF EXISTS crm__knowledge_files CASCADE;`);
+  },
+  async down() {
+    // Intentionally a no-op — we never want this table back. If a
+    // future module re-introduces entity-attached documents, it should
+    // ship its own migration with a different name.
+  },
+};
+
+export const crmMigrations: Migration[] = [
+  init,
+  dedupeCompanyDomain,
+  dropKnowledgeFiles,
+];

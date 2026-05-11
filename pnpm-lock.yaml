@@ -41,9 +41,6 @@ importers:
       '@boringos/shared':
         specifier: link:../../../boringos-framework/packages/@boringos/shared
         version: link:../../../boringos-framework/packages/@boringos/shared
-      '@hebbs/sdk':
-        specifier: link:../../../../hebbs-repos/hebbs-typescript
-        version: link:../../../../hebbs-repos/hebbs-typescript
       drizzle-orm:
         specifier: ^0.41.0
         version: 0.41.0

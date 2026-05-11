@@ -14,7 +14,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hebbs/sdk": "link:../../../../hebbs-repos/hebbs-typescript",
     "@boringos/agent": "link:../../../boringos-framework/packages/@boringos/agent",
     "@boringos/module-sdk": "link:../../../boringos-framework/packages/@boringos/module-sdk",
     "@boringos/connector-google": "link:../../../boringos-framework/packages/@boringos/connector-google",

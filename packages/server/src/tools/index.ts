@@ -13,7 +13,6 @@ import { createDealTools } from "./deals.js";
 import { createPipelineTools } from "./pipelines.js";
 import { createActivityTools } from "./activities.js";
 import { createInboxTools } from "./inbox.js";
-import { createMemoryTools } from "./memory.js";
 import { createProfileTools } from "./profile.js";
 import { createActionTools } from "./actions.js";
 import type { CrmDeps } from "./deps.js";
@@ -26,7 +25,6 @@ export function createCrmTools(deps: CrmDeps): Tool[] {
     ...createPipelineTools(deps),
     ...createActivityTools(deps),
     ...createInboxTools(deps),
-    ...createMemoryTools(deps),
     ...createProfileTools(deps),
     ...createActionTools(deps),
   ];

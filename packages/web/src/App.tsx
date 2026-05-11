@@ -13,7 +13,6 @@ import { TasksPage } from "./pages/Tasks";
 import { CopilotPage } from "./pages/Copilot";
 import { TaskDetailPage } from "./pages/TaskDetail";
 import { SettingsPage } from "./pages/Settings";
-import { KnowledgeBasePage } from "./pages/KnowledgeBase";
 import { InboxPage } from "./pages/Inbox";
 import { ActionsPage } from "./pages/Actions";
 import { AgentsPage } from "./pages/Agents";
@@ -73,7 +72,6 @@ function AppRoutes() {
         <Route path="actions" element={<ActionsPage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="tasks/:id" element={<TaskDetailPage />} />
-        <Route path="knowledge" element={<KnowledgeBasePage />} />
         <Route path="agents" element={<AgentsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/:tab" element={<SettingsPage />} />

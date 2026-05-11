@@ -12,7 +12,6 @@ import { ActivityTimeline } from "../components/ActivityTimeline";
 import { Badge } from "../components/ui/Badge";
 import { Input, Select, Textarea } from "../components/ui/FormField";
 import { EntityTasks } from "../components/EntityTasks";
-import { EntityDocuments } from "../components/EntityDocuments";
 import { EntityActions } from "../components/EntityActions";
 import type { Deal, PipelineStage } from "@boringos-crm/shared";
 
@@ -331,11 +330,6 @@ export function DealDetailPage() {
           {/* Tasks */}
           <div className="mb-6">
             <EntityTasks entityType="crm_deal" entityId={deal.id} />
-          </div>
-
-          {/* Documents */}
-          <div className="mb-6">
-            <EntityDocuments entityType="deal" entityId={deal.id} />
           </div>
         </div>
 

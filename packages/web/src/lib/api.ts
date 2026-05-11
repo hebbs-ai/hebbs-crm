@@ -83,11 +83,6 @@ export async function tool<T>(name: string, input: unknown): Promise<T> {
 //   POST   /inbox/sync                     -> crm.inbox.sync             { ...body }
 //   POST   /inbox/backfill-threads         -> crm.inbox.backfill_threads { ...body }
 //   POST   /inbox/backfill-bodies          -> crm.inbox.backfill_bodies  { ...body }
-//   GET/POST/DELETE /memory/config         -> crm.memory.<get_config|set_config|delete_config>
-//   GET    /memory/files                   -> crm.memory.list_files
-//   GET    /memory/files/<id>/status       -> crm.memory.get_file_status { id }
-//   POST   /memory/files                   -> crm.memory.upload_file
-//   DELETE /memory/files/<id>              -> crm.memory.delete_file     { id }
 //   GET    /actions                        -> crm.actions.list
 //   GET    /actions/count                  -> crm.actions.count_pending
 //   POST   /actions/<id>/dismiss           -> crm.actions.dismiss        { id }
@@ -157,24 +152,6 @@ function translate(method: string, fullPath: string, body?: unknown): Translatio
         if (rest[1] === "thread" && m === "GET") return { toolName: "crm.inbox.get_thread", input: { id } };
         if (rest[1] === "reply" && m === "POST") return { toolName: "crm.inbox.reply", input: { id, ...bodyObj } };
         if (rest[1] === "archive-gmail" && m === "POST") return { toolName: "crm.inbox.archive", input: { id } };
-      }
-      break;
-    }
-    case "memory": {
-      if (rest.length === 1 && rest[0] === "config") {
-        if (m === "GET") return { toolName: "crm.memory.get_config", input: {} };
-        if (m === "POST") return { toolName: "crm.memory.set_config", input: bodyObj };
-        if (m === "DELETE") return { toolName: "crm.memory.delete_config", input: {} };
-      }
-      if (rest.length === 1 && rest[0] === "files") {
-        if (m === "GET") return { toolName: "crm.memory.list_files", input: query };
-        if (m === "POST") return { toolName: "crm.memory.upload_file", input: bodyObj };
-      }
-      if (rest.length === 3 && rest[0] === "files" && rest[2] === "status" && m === "GET") {
-        return { toolName: "crm.memory.get_file_status", input: { id: rest[1] } };
-      }
-      if (rest.length === 2 && rest[0] === "files" && m === "DELETE") {
-        return { toolName: "crm.memory.delete_file", input: { id: rest[1] } };
       }
       break;
     }

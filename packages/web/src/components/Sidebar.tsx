@@ -13,7 +13,6 @@ const NAV_ITEMS = [
   { to: "/actions", label: "Actions", icon: "\u2192", badge: "actionCount" as const },
   { to: "/tasks", label: "Tasks", icon: "\u2611" },
   { to: "/copilot", label: "Copilot", icon: "\u25C7", shortcut: "\u2318K" as const },
-  { to: "/knowledge", label: "Knowledge Base", icon: "\u2261" },
 ];
 
 const TOOL_ITEMS = [
