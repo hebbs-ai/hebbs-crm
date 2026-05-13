@@ -10,10 +10,12 @@
 import { z } from "@boringos/module-sdk";
 import type { Tool, ToolContext, ToolResult } from "@boringos/module-sdk";
 import { sql } from "drizzle-orm";
+import { classifyAutomatedMail } from "@boringos/core";
+import type { EmailHeaders } from "@boringos/connector-google";
 import { getGmailClient } from "../google-client.js";
 import { logActivity } from "../activity-logger.js";
 import { resolveInboxItemEntities } from "../inbox-resolve.js";
-import { ensureContactForInbound } from "../lead-ingestion.js";
+import { resolveOrDeferLead } from "../lead-ingestion.js";
 import { emitCrm, type CrmDeps } from "./deps.js";
 
 export function createInboxTools(deps: CrmDeps): Tool[] {
@@ -458,9 +460,11 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         bodyHtml: string | null;
         snippet: string | null;
         date: string | null;
+        headers?: EmailHeaders;
       }>;
 
       let newCount = 0;
+      let autoFilteredCount = 0;
       const itemIds: string[] = [];
 
       for (const msg of messages) {
@@ -471,28 +475,61 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         `)) as unknown as Array<{ id: string }>;
         if (existing.length > 0) continue;
 
+        // Phase 3b — header prefilter. Run BEFORE any lead-creation
+        // logic so newsletters / no-reply senders never touch the
+        // CRM tables. We still create the inbox row (the user sees
+        // it under "noise") and stamp triage so downstream agents
+        // skip it.
+        const autoClass = msg.headers
+          ? classifyAutomatedMail({ headers: msg.headers, from: msg.from })
+          : { automated: false, kind: null, reasons: [] as string[] };
+
+        const initialMeta: Record<string, unknown> = {
+          threadId: msg.threadId,
+          bodyHtml: msg.bodyHtml,
+        };
+        if (autoClass.automated) {
+          initialMeta.triage = {
+            label: "noise",
+            reason: autoClass.reasons[0] ?? "automated mail (header-prefilter)",
+            source: "header-prefilter",
+            classifiedAt: new Date().toISOString(),
+          };
+          initialMeta.headerClassification = {
+            automated: true,
+            kind: autoClass.kind,
+            reasons: autoClass.reasons,
+          };
+        }
+
         const itemId = crypto.randomUUID();
         await db.execute(sql`
           INSERT INTO inbox_items (id, tenant_id, source, source_id, subject, body, "from", status, metadata, created_at, updated_at)
           VALUES (${itemId}, ${ctx.tenantId}, 'gmail', ${msg.id},
             ${msg.subject ?? "No subject"}, ${msg.body}, ${msg.from},
-            'unread', ${JSON.stringify({ threadId: msg.threadId, bodyHtml: msg.bodyHtml })}::jsonb,
+            'unread', ${JSON.stringify(initialMeta)}::jsonb,
             now(), now())
         `);
         newCount++;
         itemIds.push(itemId);
 
-        // Resolve (or auto-create) the sender's CRM tuple. New senders
-        // get a contact + company + stub deal; known senders short-
-        // circuit. Either way we end with ids we can attach to the
-        // inbound-email activity below.
-        const linked = await ensureContactForInbound(
+        if (autoClass.automated) {
+          autoFilteredCount++;
+          // Skip lead resolution + activity logging for automated mail.
+          continue;
+        }
+
+        // Phase 3c — resolve existing contact or defer to triage+ICP.
+        // Existing contacts log a "Received:" activity and touch their
+        // updated_at + re-engage stale deals (handled in lead-ingestion).
+        // New senders return deferred=true; lead creation waits for
+        // the triage.classified workflow to fire crm.leads.classify_and_create.
+        const linked = await resolveOrDeferLead(
           deps,
           ctx.tenantId,
           msg.from,
-          msg.subject,
         );
-        if (linked.contactId) {
+        if (linked.matched && linked.contactId) {
           await logActivity({
             db: deps.db,
             tenantId: ctx.tenantId,
@@ -503,16 +540,29 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
             dealId: linked.dealId,
             companyId: linked.companyId,
           });
-          // Stamp the inbox row with the resolved tuple so the lens (and
-          // any downstream tools) don't have to re-do the lookup.
           await deps.db.execute(sql`
             UPDATE inbox_items
             SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
               crmLens: {
-                contactMatch: linked.contactId ? { id: linked.contactId } : null,
+                contactMatch: { id: linked.contactId },
                 dealContext: linked.dealId ? { id: linked.dealId } : null,
                 companyMatch: linked.companyId ? { id: linked.companyId } : null,
-                autoCreated: linked.created,
+                autoCreated: false,
+              },
+            })}::jsonb
+            WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
+          `);
+        } else if (linked.deferred) {
+          // Stamp the inbox row so the leads.classify_and_create tool
+          // can find which sender we're qualifying.
+          await deps.db.execute(sql`
+            UPDATE inbox_items
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
+              crmLens: {
+                pendingLead: {
+                  email: linked.email ?? null,
+                  displayName: linked.displayName ?? null,
+                },
               },
             })}::jsonb
             WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
@@ -560,6 +610,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         result: {
           syncedCount: messages.length,
           newCount,
+          autoFilteredCount,
           threadsBackfilled,
           itemIds,
         },
@@ -812,14 +863,8 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
           'unread', '{}'::jsonb, now(), now())
       `);
 
-      const linked = await ensureContactForInbound(
-        deps,
-        ctx.tenantId,
-        input.from,
-        input.subject,
-      );
-
-      if (linked.contactId) {
+      const linked = await resolveOrDeferLead(deps, ctx.tenantId, input.from);
+      if (linked.matched && linked.contactId) {
         await logActivity({
           db,
           tenantId: ctx.tenantId,
@@ -834,10 +879,23 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
           UPDATE inbox_items
           SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
             crmLens: {
-              contactMatch: linked.contactId ? { id: linked.contactId } : null,
+              contactMatch: { id: linked.contactId },
               dealContext: linked.dealId ? { id: linked.dealId } : null,
               companyMatch: linked.companyId ? { id: linked.companyId } : null,
-              autoCreated: linked.created,
+              autoCreated: false,
+            },
+          })}::jsonb
+          WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
+        `);
+      } else if (linked.deferred) {
+        await db.execute(sql`
+          UPDATE inbox_items
+          SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
+            crmLens: {
+              pendingLead: {
+                email: linked.email ?? null,
+                displayName: linked.displayName ?? null,
+              },
             },
           })}::jsonb
           WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
@@ -847,7 +905,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
       emitCrm(deps, "inbox.item_created", ctx.tenantId, {
         itemId,
         source,
-        autoCreatedLead: linked.created,
+        autoCreatedLead: false,
       });
 
       return {
@@ -858,7 +916,8 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
           contactId: linked.contactId,
           dealId: linked.dealId,
           companyId: linked.companyId,
-          autoCreated: linked.created,
+          autoCreated: false,
+          deferred: linked.deferred,
           skipped: linked.skipped,
           skipReason: linked.skipReason ?? null,
         },

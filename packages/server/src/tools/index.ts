@@ -17,6 +17,8 @@ import { createProfileTools } from "./profile.js";
 import { createActionTools } from "./actions.js";
 import { createCalendarTools } from "./calendar.js";
 import { createRoutineTools } from "./routines.js";
+import { createLeadTools } from "./leads.js";
+import { createMaintenanceTools } from "./maintenance.js";
 import type { CrmDeps } from "./deps.js";
 
 export function createCrmTools(deps: CrmDeps): Tool[] {
@@ -31,5 +33,7 @@ export function createCrmTools(deps: CrmDeps): Tool[] {
     ...createActionTools(deps),
     ...createCalendarTools(deps),
     ...createRoutineTools(deps),
+    ...createLeadTools(deps),
+    ...createMaintenanceTools(deps),
   ];
 }

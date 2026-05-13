@@ -52,6 +52,7 @@ export const createCrmModule: ModuleFactory = (factoryDeps) => {
       "./skills/follow-up-writer/SKILL.md",
       "./skills/meeting-prep/SKILL.md",
       "./skills/copilot/SKILL.md",
+      "./skills/maintenance/SKILL.md",
     ],
     lifecycle: createCrmLifecycle(factoryDeps),
     __moduleDir,

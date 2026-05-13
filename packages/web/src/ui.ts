@@ -25,6 +25,7 @@ import { ContactDetailSlot } from "./slots/ContactDetail.js";
 import { CompaniesSlot } from "./slots/Companies.js";
 import { CompanyDetailSlot } from "./slots/CompanyDetail.js";
 import { PipelineSettingsSlot } from "./slots/PipelineSettings.js";
+import { MaintenanceSettingsSlot } from "./slots/MaintenanceSettings.js";
 import {
   sendFollowup,
   runAnalyst,
@@ -63,6 +64,7 @@ export const crmUI: PluginUI = {
   ],
   settingsPanels: [
     { id: "crm.pipeline", label: "Pipeline configuration", element: PipelineSettingsSlot },
+    { id: "crm.maintenance", label: "Maintenance", element: MaintenanceSettingsSlot },
   ],
 };
 

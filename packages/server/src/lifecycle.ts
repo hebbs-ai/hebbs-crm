@@ -37,6 +37,7 @@ const CRM_AGENT_ROLES = [
   "deal-analyst",
   "follow-up-writer",
   "meeting-prep",
+  "crm-maintenance",
 ] as const;
 
 const CRM_WORKFLOW_NAMES = [
@@ -51,6 +52,10 @@ const CRM_WORKFLOW_NAMES = [
   "Enrich new contact",
   "Enrich new company",
   "Analyze new deal",
+  // Phase 3 — ICP-gated lead creation.
+  "Classify and create lead",
+  // Phase 4 — deal creation gated on user reply.
+  "Create deal on reply",
 ];
 
 export function createCrmLifecycle(
@@ -378,6 +383,7 @@ interface SeededAgents {
   dealAnalystId: string;
   followUpId: string;
   meetingPrepId: string;
+  maintenanceId: string;
 }
 
 async function seedAgents(
@@ -393,6 +399,7 @@ async function seedAgents(
     dealAnalystId: randomUUID(),
     followUpId: randomUUID(),
     meetingPrepId: randomUUID(),
+    maintenanceId: randomUUID(),
   };
 
   // SKILL.md (loaded by v2-skills via the role gate) carries the
@@ -406,6 +413,7 @@ async function seedAgents(
     [ids.dealAnalystId, "Deal Analyst", "deal-analyst"],
     [ids.followUpId, "Follow-up Writer", "follow-up-writer"],
     [ids.meetingPrepId, "Meeting Prep", "meeting-prep"],
+    [ids.maintenanceId, "CRM Maintenance", "crm-maintenance"],
   ];
 
   for (const [id, name, role] of seeds) {
@@ -598,6 +606,99 @@ async function seedWorkflows(
       agents.dealAnalystId,
     ),
     entityCreatedEdges(),
+  );
+
+  // Phase 3 — ICP-gated lead creation.
+  //
+  // Wakes on `triage.classified`. When the label is urgent or
+  // important, classify the sender against the business profile.
+  // If `icpFit` is true, materialize the contact + company (no deal).
+  // Noise/fyi short-circuit at the first condition.
+  await insertWorkflow(
+    db,
+    tenantId,
+    randomUUID(),
+    "Classify and create lead",
+    [
+      { id: "trigger", name: "trigger", kind: "trigger", type: "trigger", config: { eventType: "triage.classified" } },
+      {
+        id: "guard-label",
+        name: "guard-label",
+        kind: "condition",
+        type: "condition",
+        config: { field: "{{trigger.label}}", operator: "in", value: ["urgent", "important"] },
+      },
+      {
+        id: "classify",
+        name: "classify",
+        kind: "tool",
+        type: "tool",
+        tool: "crm.leads.classify_and_create",
+        inputs: { itemId: "{{trigger.itemId}}" },
+        config: {},
+      },
+      {
+        id: "guard-fit",
+        name: "guard-fit",
+        kind: "condition",
+        type: "condition",
+        config: { field: "{{classify.icpFit}}", operator: "equals", value: true },
+      },
+      {
+        id: "materialize",
+        name: "materialize",
+        kind: "tool",
+        type: "tool",
+        tool: "crm.leads.materialize",
+        inputs: {
+          itemId: "{{trigger.itemId}}",
+          classification: {
+            icpFit: "{{classify.icpFit}}",
+            confidence: "{{classify.confidence}}",
+            reason: "{{classify.reason}}",
+            suggestedContactName: "{{classify.suggestedContactName}}",
+            suggestedCompany: "{{classify.suggestedCompany}}",
+          },
+        },
+        config: {},
+      },
+    ],
+    [
+      { id: "e1", sourceBlockId: "trigger", targetBlockId: "guard-label", sourceHandle: null, sortOrder: 0 },
+      { id: "e2", sourceBlockId: "guard-label", targetBlockId: "classify", sourceHandle: "true", sortOrder: 0 },
+      { id: "e3", sourceBlockId: "classify", targetBlockId: "guard-fit", sourceHandle: null, sortOrder: 0 },
+      { id: "e4", sourceBlockId: "guard-fit", targetBlockId: "materialize", sourceHandle: "true", sortOrder: 0 },
+    ],
+  );
+
+  // Phase 4 — deal creation gated on user reply.
+  //
+  // Wakes on `inbox.reply_sent` events emitted by crm.inbox.reply.
+  // The promote tool itself enforces "contact exists AND no open
+  // deal AND non-consumer-domain"; the workflow just plumbs the
+  // event through.
+  await insertWorkflow(
+    db,
+    tenantId,
+    randomUUID(),
+    "Create deal on reply",
+    [
+      { id: "trigger", name: "trigger", kind: "trigger", type: "trigger", config: { eventType: "inbox.reply_sent" } },
+      {
+        id: "promote",
+        name: "promote",
+        kind: "tool",
+        type: "tool",
+        tool: "crm.contacts.promote_to_deal",
+        inputs: {
+          contactId: "{{trigger.contactId}}",
+          source: "reply_sent",
+          itemId: "{{trigger.itemId}}",
+        },
+        config: {},
+      },
+    ],
+    [{ id: "e1", sourceBlockId: "trigger", targetBlockId: "promote", sourceHandle: null, sortOrder: 0 }],
   );
 
   return { emailWorkflowId, calCheckWorkflowId };

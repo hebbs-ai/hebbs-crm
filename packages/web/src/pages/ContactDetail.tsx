@@ -4,6 +4,8 @@ import { useContact, useUpdateContact, useDeleteContact, useContacts } from "../
 import { useActivities } from "../hooks/useActivities";
 import { useCompany } from "../hooks/useCompanies";
 import { useDeals } from "../hooks/useDeals";
+import { tool } from "../lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 import { Modal } from "../components/ui/Modal";
 import { ContactForm } from "../components/ContactForm";
 import { PropertyRow } from "../components/ui/PropertyRow";
@@ -91,6 +93,32 @@ export function ContactDetailPage() {
     return allDealsData.data.filter((d: Deal) => d.contactId === id || d.companyId === companyId);
   }, [allDealsData, id, companyId]);
 
+  const contactOpenDeals = useMemo<Deal[]>(
+    () => contactDeals.filter((d) => d.contactId === id),
+    [contactDeals, id],
+  );
+
+  const queryClient = useQueryClient();
+  const [promoting, setPromoting] = useState(false);
+
+  const handlePromote = async () => {
+    if (!id) return;
+    setPromoting(true);
+    try {
+      const result = await tool<{ dealId: string; created: boolean }>(
+        "crm.contacts.promote_to_deal",
+        { contactId: id, source: "manual" },
+      );
+      await queryClient.invalidateQueries({ queryKey: ["deals"] });
+      await queryClient.invalidateQueries({ queryKey: ["activities"] });
+      navigate(`/deals/${result.dealId}`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to create deal");
+    } finally {
+      setPromoting(false);
+    }
+  };
+
   // Other contacts at the same company
   const { data: siblingContactsData } = useContacts(companyId ? { companyId } : undefined);
   const siblingContacts = useMemo<Contact[]>(() => {
@@ -147,6 +175,15 @@ export function ContactDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {contactOpenDeals.length === 0 && (
+            <button
+              onClick={handlePromote}
+              disabled={promoting}
+              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+            >
+              {promoting ? "Creating…" : "Promote to deal"}
+            </button>
+          )}
           <button onClick={() => setShowEdit(true)} className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-text-primary hover:bg-bg-hover transition-colors">
             Edit
           </button>
