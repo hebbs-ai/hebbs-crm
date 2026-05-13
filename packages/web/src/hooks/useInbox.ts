@@ -1,4 +1,11 @@
+// Inbox React hooks. CRM-side actions (reply, archive, sync, thread)
+// go through the v2 tool dispatcher (`/api/tools/crm.inbox.<verb>`).
+// The shell's framework admin routes (`/api/admin/inbox/...`) are still
+// used for list / archive / create-task because the framework owns the
+// underlying `inbox_items` table CRUD.
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api, tool } from "../lib/api";
 
 interface InboxItem {
   id: string;
@@ -15,15 +22,18 @@ interface InboxItem {
 }
 
 function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem("token");
-  const tenantId = localStorage.getItem("tenantId");
+  // Mirror lib/api.ts — shell's keys with legacy fallback.
+  const token =
+    localStorage.getItem("boringos.token") ?? localStorage.getItem("token");
+  const tenantId =
+    localStorage.getItem("boringos.tenantId") ?? localStorage.getItem("tenantId");
   const h: Record<string, string> = { "Content-Type": "application/json" };
   if (token) h["Authorization"] = `Bearer ${token}`;
   if (tenantId) h["X-Tenant-Id"] = tenantId;
   return h;
 }
 
-async function inboxFetch<T>(path: string, opts?: RequestInit): Promise<T> {
+async function adminFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`/api/admin/inbox${path}`, { headers: authHeaders(), ...opts });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -36,7 +46,7 @@ export function useInbox(status?: string) {
   const params = status ? `?status=${status}` : "";
   return useQuery({
     queryKey: ["inbox", status ?? "all"],
-    queryFn: () => inboxFetch<{ items: InboxItem[] }>(params),
+    queryFn: () => adminFetch<{ items: InboxItem[] }>(params),
   });
 }
 
@@ -58,7 +68,7 @@ export function useArchiveInboxItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      inboxFetch<{ ok: boolean }>(`/${id}/archive`, { method: "POST" }),
+      adminFetch<{ ok: boolean }>(`/${id}/archive`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["inbox"] }),
   });
 }
@@ -67,7 +77,7 @@ export function useCreateTaskFromInbox() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      inboxFetch<{ ok: boolean; taskId?: string }>(`/${id}/create-task`, { method: "POST" }),
+      adminFetch<{ ok: boolean; taskId?: string }>(`/${id}/create-task`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["inbox"] }),
   });
 }
@@ -86,26 +96,23 @@ export interface ThreadMessage {
   snippet: string | null;
 }
 
-async function crmFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/crm/inbox${path}`, { headers: authHeaders(), ...opts });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed: ${res.status}`);
-  }
-  return res.json();
-}
-
 export function useReplyToEmail() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: string }) =>
-      crmFetch<{ ok: boolean; messageId?: string }>(`/${id}/reply`, {
-        method: "POST",
-        body: JSON.stringify({ body }),
-      }),
+      tool<{
+        messageId?: string;
+        to: string;
+        contactId: string | null;
+        dealId: string | null;
+        companyId: string | null;
+      }>("crm.inbox.reply", { id, body }),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["inbox"] });
       qc.invalidateQueries({ queryKey: ["inbox", vars.id, "thread"] });
+      // Reply now logs a typed 'email' activity — refresh timelines.
+      qc.invalidateQueries({ queryKey: ["activities"] });
+      qc.invalidateQueries({ queryKey: ["dossier"] });
     },
   });
 }
@@ -114,7 +121,7 @@ export function useArchiveInGmail() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      crmFetch<{ ok: boolean }>(`/${id}/archive-gmail`, { method: "POST" }),
+      api.post<{ archived: boolean; id: string }>(`/inbox/${id}/archive-gmail`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["inbox"] }),
   });
 }
@@ -122,7 +129,11 @@ export function useArchiveInGmail() {
 export function useSyncInbox() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => crmFetch<{ created: number; threads: number }>("/sync", { method: "POST" }),
+    mutationFn: () =>
+      tool<{ syncedCount: number; newCount: number; threadsBackfilled: number; itemIds: string[] }>(
+        "crm.inbox.sync",
+        {},
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["inbox"] }),
   });
 }
@@ -130,7 +141,8 @@ export function useSyncInbox() {
 export function useInboxThread(itemId: string | null) {
   return useQuery({
     queryKey: ["inbox", itemId, "thread"],
-    queryFn: () => crmFetch<{ threadMessages: ThreadMessage[] }>(`/${itemId}/thread`),
+    queryFn: () =>
+      tool<{ threadMessages: ThreadMessage[] }>("crm.inbox.get_thread", { id: itemId }),
     enabled: !!itemId,
     staleTime: 5 * 60 * 1000, // cache for 5 min
   });

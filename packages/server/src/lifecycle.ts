@@ -290,7 +290,23 @@ async function scrubCrmSeeds(db: PostgresJsDatabase, tenantId: string) {
 // Seed helpers
 // ─────────────────────────────────────────────────────────────────
 
+// Idempotent: re-install must not duplicate the default pipeline /
+// its stages. The 005-default-pipeline-uniq partial index now hard-
+// enforces "one default per tenant"; without this short-circuit, the
+// second install would fail at the INSERT instead of no-oping.
 async function seedPipeline(db: PostgresJsDatabase, tenantId: string) {
+  const existing = (await db.execute(sql`
+    SELECT id FROM crm__pipelines
+    WHERE tenant_id = ${tenantId} AND is_default = true
+    LIMIT 1
+  `)) as unknown as Array<{ id: string }>;
+  if (existing[0]) {
+    // Pipeline + stages already seeded — leave them alone so we don't
+    // stomp on user-renamed stages or break deals pointing at the
+    // existing stage_ids.
+    return;
+  }
+
   const pipelineId = randomUUID();
   await db.insert(pipelines).values({
     id: pipelineId,
@@ -529,9 +545,13 @@ async function seedWorkflows(
       },
     ],
     [
+      // The framework's workflow engine sets selectedHandle to "true"/"false"
+      // after a condition block (workflow.ts:353); "condition-true" used to
+      // be silently pruned, which left Email Sync + Calendar Check paused
+      // forever after the user connected Google.
       { id: "e1", sourceBlockId: "trigger", targetBlockId: "guard", sourceHandle: null, sortOrder: 0 },
-      { id: "e2", sourceBlockId: "guard", targetBlockId: "unpause_sync", sourceHandle: "condition-true", sortOrder: 0 },
-      { id: "e3", sourceBlockId: "guard", targetBlockId: "unpause_calendar", sourceHandle: "condition-true", sortOrder: 1 },
+      { id: "e2", sourceBlockId: "guard", targetBlockId: "unpause_sync", sourceHandle: "true", sortOrder: 0 },
+      { id: "e3", sourceBlockId: "guard", targetBlockId: "unpause_calendar", sourceHandle: "true", sortOrder: 1 },
     ],
   );
 

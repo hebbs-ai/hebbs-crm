@@ -12,6 +12,8 @@ import type { Tool, ToolContext, ToolResult } from "@boringos/module-sdk";
 import { sql } from "drizzle-orm";
 import { getGmailClient } from "../google-client.js";
 import { logActivity } from "../activity-logger.js";
+import { resolveInboxItemEntities } from "../inbox-resolve.js";
+import { ensureContactForInbound } from "../lead-ingestion.js";
 import { emitCrm, type CrmDeps } from "./deps.js";
 
 export function createInboxTools(deps: CrmDeps): Tool[] {
@@ -47,18 +49,33 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         i === 0 ? f : sql`${acc} AND ${f}`,
       );
 
-      const rows = (await deps.db.execute(sql`
-        SELECT id, source, subject, "from", status,
-               created_at as "createdAt", archived_at as "archivedAt"
-        FROM inbox_items
-        WHERE ${whereClause}
-        ORDER BY created_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `)) as unknown as Array<Record<string, unknown>>;
+      const [rows, totalRows] = (await Promise.all([
+        deps.db.execute(sql`
+          SELECT id, source, subject, "from", status,
+                 created_at as "createdAt", archived_at as "archivedAt"
+          FROM inbox_items
+          WHERE ${whereClause}
+          ORDER BY created_at DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `),
+        deps.db.execute(sql`
+          SELECT count(*)::int AS n
+          FROM inbox_items
+          WHERE ${whereClause}
+        `),
+      ])) as unknown as [
+        Array<Record<string, unknown>>,
+        Array<{ n: number }>,
+      ];
 
       return {
         ok: true,
-        result: { data: rows, total: rows.length, limit, offset },
+        result: {
+          data: rows,
+          total: totalRows[0]?.n ?? rows.length,
+          limit,
+          offset,
+        },
       };
     },
   };
@@ -278,18 +295,44 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
 
       const messageId = (result.data as { id?: string } | undefined)?.id;
 
-      // Record an activity. For agent invocations there's no real
-      // userId — fall back to null (logActivity will coalesce to
-      // tenantId for non-null FKs at write time).
+      // Resolve the contact/deal/company so the activity lands in the
+      // right timelines. The lens stores contactMatch/dealContext in
+      // metadata once it's run — `resolveInboxItemEntities` reads that
+      // first and falls back to a `from`-header email lookup.
+      const linked = await resolveInboxItemEntities(db, ctx.tenantId, itemId);
       await logActivity({
         db,
         tenantId: ctx.tenantId,
         userId: input.actorUserId,
-        subject: `Email reply: ${item.subject ?? "(no subject)"}`,
+        type: "email",
+        subject: `Replied: ${item.subject ?? "(no subject)"}`,
         body: replyBody,
+        contactId: linked.contactId,
+        dealId: linked.dealId,
+        companyId: linked.companyId,
       });
 
-      return { ok: true, result: { messageId, to: toEmail } };
+      // Tell anyone interested (workflows, list views) that the inbox
+      // row just got a fresh outbound message attached.
+      emitCrm(deps, "inbox.reply_sent", ctx.tenantId, {
+        itemId,
+        to: toEmail,
+        messageId,
+        contactId: linked.contactId,
+        dealId: linked.dealId,
+        companyId: linked.companyId,
+      });
+
+      return {
+        ok: true,
+        result: {
+          messageId,
+          to: toEmail,
+          contactId: linked.contactId,
+          dealId: linked.dealId,
+          companyId: linked.companyId,
+        },
+      };
     },
   };
 
@@ -359,6 +402,8 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         UPDATE inbox_items SET status = 'archived', archived_at = now(), updated_at = now()
         WHERE id = ${itemId}
       `);
+
+      emitCrm(deps, "inbox.archived", ctx.tenantId, { itemId });
 
       return { ok: true, result: { archived: true, id: itemId } };
     },
@@ -436,6 +481,43 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         `);
         newCount++;
         itemIds.push(itemId);
+
+        // Resolve (or auto-create) the sender's CRM tuple. New senders
+        // get a contact + company + stub deal; known senders short-
+        // circuit. Either way we end with ids we can attach to the
+        // inbound-email activity below.
+        const linked = await ensureContactForInbound(
+          deps,
+          ctx.tenantId,
+          msg.from,
+          msg.subject,
+        );
+        if (linked.contactId) {
+          await logActivity({
+            db: deps.db,
+            tenantId: ctx.tenantId,
+            type: "email",
+            subject: `Received: ${msg.subject ?? "(no subject)"}`,
+            body: msg.snippet ?? msg.body ?? undefined,
+            contactId: linked.contactId,
+            dealId: linked.dealId,
+            companyId: linked.companyId,
+          });
+          // Stamp the inbox row with the resolved tuple so the lens (and
+          // any downstream tools) don't have to re-do the lookup.
+          await deps.db.execute(sql`
+            UPDATE inbox_items
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
+              crmLens: {
+                contactMatch: linked.contactId ? { id: linked.contactId } : null,
+                dealContext: linked.dealId ? { id: linked.dealId } : null,
+                companyMatch: linked.companyId ? { id: linked.companyId } : null,
+                autoCreated: linked.created,
+              },
+            })}::jsonb
+            WHERE id = ${itemId}
+          `);
+        }
       }
 
       // Backfill threads for newly created items.
@@ -675,7 +757,114 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
     },
   };
 
-  return [list, getThread, reply, archive, sync, backfillThreads, backfillBodies];
+  // Lightweight one-off ingest path: lets the shell / webhooks / tests
+  // hand a synthetic email straight into the CRM without going through
+  // Gmail. Mirrors the per-message logic in `inbox.sync` (dedupe on
+  // source/source_id, auto-create lead, log inbound activity, emit the
+  // event so triage / lens agents wake).
+  const ingest: Tool = {
+    name: "inbox.ingest",
+    description:
+      "Insert a single inbound email into the inbox (deduped by source_id) and run the same lead-resolution + activity-logging as `inbox.sync`. Use for webhooks, manual paste-ins, and smoke tests where Gmail isn't connected. Returns the new item id plus the resolved/created CRM tuple.",
+    inputs: z.object({
+      from: z.string().min(1),
+      subject: z.string().optional(),
+      body: z.string().optional(),
+      source: z.string().optional(),
+      sourceId: z.string().optional(),
+    }),
+    async handler(
+      input: {
+        from: string;
+        subject?: string;
+        body?: string;
+        source?: string;
+        sourceId?: string;
+      },
+      ctx: ToolContext,
+    ): Promise<ToolResult> {
+      const db = deps.db;
+      const source = input.source ?? "manual";
+      const sourceId = input.sourceId ?? `manual-${crypto.randomUUID()}`;
+
+      const existing = (await db.execute(sql`
+        SELECT id FROM inbox_items
+        WHERE tenant_id = ${ctx.tenantId} AND source = ${source} AND source_id = ${sourceId}
+        LIMIT 1
+      `)) as unknown as Array<{ id: string }>;
+      if (existing[0]) {
+        return {
+          ok: true,
+          result: {
+            itemId: existing[0].id,
+            duplicate: true,
+          },
+        };
+      }
+
+      const itemId = crypto.randomUUID();
+      await db.execute(sql`
+        INSERT INTO inbox_items (id, tenant_id, source, source_id, subject, body, "from", status, metadata, created_at, updated_at)
+        VALUES (${itemId}, ${ctx.tenantId}, ${source}, ${sourceId},
+          ${input.subject ?? "No subject"}, ${input.body ?? null}, ${input.from},
+          'unread', '{}'::jsonb, now(), now())
+      `);
+
+      const linked = await ensureContactForInbound(
+        deps,
+        ctx.tenantId,
+        input.from,
+        input.subject,
+      );
+
+      if (linked.contactId) {
+        await logActivity({
+          db,
+          tenantId: ctx.tenantId,
+          type: "email",
+          subject: `Received: ${input.subject ?? "(no subject)"}`,
+          body: input.body ?? undefined,
+          contactId: linked.contactId,
+          dealId: linked.dealId,
+          companyId: linked.companyId,
+        });
+        await db.execute(sql`
+          UPDATE inbox_items
+          SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
+            crmLens: {
+              contactMatch: linked.contactId ? { id: linked.contactId } : null,
+              dealContext: linked.dealId ? { id: linked.dealId } : null,
+              companyMatch: linked.companyId ? { id: linked.companyId } : null,
+              autoCreated: linked.created,
+            },
+          })}::jsonb
+          WHERE id = ${itemId}
+        `);
+      }
+
+      emitCrm(deps, "inbox.item_created", ctx.tenantId, {
+        itemId,
+        source,
+        autoCreatedLead: linked.created,
+      });
+
+      return {
+        ok: true,
+        result: {
+          itemId,
+          duplicate: false,
+          contactId: linked.contactId,
+          dealId: linked.dealId,
+          companyId: linked.companyId,
+          autoCreated: linked.created,
+          skipped: linked.skipped,
+          skipReason: linked.skipReason ?? null,
+        },
+      };
+    },
+  };
+
+  return [list, getThread, reply, archive, sync, backfillThreads, backfillBodies, ingest];
 }
 
 /** Decode base64url Gmail body data to UTF-8 string. */

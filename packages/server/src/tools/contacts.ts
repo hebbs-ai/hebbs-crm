@@ -5,7 +5,7 @@
 
 import { z } from "@boringos/module-sdk";
 import type { Tool, ToolContext, ToolResult } from "@boringos/module-sdk";
-import { eq, and, ilike, or } from "drizzle-orm";
+import { eq, and, ilike, or, sql } from "drizzle-orm";
 import { contacts } from "../schema/contacts.js";
 import { logActivity } from "../activity-logger.js";
 import { emitCrm, type CrmDeps } from "./deps.js";
@@ -44,17 +44,24 @@ export function createContactTools(deps: CrmDeps): Tool[] {
           )!,
         );
       }
-      const rows = await deps.db
-        .select()
-        .from(contacts)
-        .where(and(...conds))
-        .limit(input.limit ?? 50)
-        .offset(input.offset ?? 0);
+      const where = and(...conds);
+      const [rows, totalRow] = await Promise.all([
+        deps.db
+          .select()
+          .from(contacts)
+          .where(where)
+          .limit(input.limit ?? 50)
+          .offset(input.offset ?? 0),
+        deps.db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(contacts)
+          .where(where),
+      ]);
       return {
         ok: true,
         result: {
           data: rows,
-          total: rows.length,
+          total: totalRow[0]?.n ?? rows.length,
           limit: input.limit ?? 50,
           offset: input.offset ?? 0,
         },
@@ -115,11 +122,12 @@ export function createContactTools(deps: CrmDeps): Tool[] {
       },
       ctx: ToolContext,
     ): Promise<ToolResult> {
+      const ownerId = input.ownerId ?? ctx.tenantId;
       const [created] = await deps.db
         .insert(contacts)
         .values({
           tenantId: ctx.tenantId,
-          ownerId: input.ownerId ?? ctx.tenantId,
+          ownerId,
           firstName: input.firstName,
           lastName: input.lastName,
           email: input.email ?? null,
@@ -136,7 +144,7 @@ export function createContactTools(deps: CrmDeps): Tool[] {
       await logActivity({
         db: deps.db,
         tenantId: ctx.tenantId,
-        userId: input.ownerId,
+        userId: ownerId,
         subject: `Contact created: ${created.firstName} ${created.lastName ?? ""}`.trim(),
         contactId: created.id,
         companyId: created.companyId,

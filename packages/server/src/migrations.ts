@@ -183,8 +183,111 @@ const dropKnowledgeFiles: Migration = {
   },
 };
 
+// Contact email dedupe — `inbox.sync` auto-creates contacts from
+// inbound senders. Without a uniqueness constraint, two near-simultaneous
+// emails from the same address (or a manual create + an inbound) end up
+// as two contact rows for the same person. Partial index so contacts
+// without an email (manually-entered phone-only leads) stay free to
+// repeat. lower(email) so case-only differences (parag@x vs PARAG@x)
+// collide.
+const dedupeContactEmail: Migration = {
+  id: "004-contact-email-uniq",
+  async up(db) {
+    // First, dedupe any existing rows that would block the index. Keep
+    // the earliest row by created_at and reassign any FK references on
+    // the rest before deleting them. The activity / deal tables are
+    // soft-linked (uuid columns, no FK), so a plain UPDATE is enough.
+    await db.execute(`
+      WITH winners AS (
+        SELECT DISTINCT ON (tenant_id, lower(email)) id, tenant_id, lower(email) AS k
+        FROM crm__contacts
+        WHERE email IS NOT NULL
+        ORDER BY tenant_id, lower(email), created_at ASC
+      ),
+      losers AS (
+        SELECT c.id AS loser_id, w.id AS winner_id
+        FROM crm__contacts c
+        JOIN winners w
+          ON w.tenant_id = c.tenant_id AND w.k = lower(c.email)
+        WHERE c.email IS NOT NULL AND c.id <> w.id
+      )
+      UPDATE crm__deals d SET contact_id = l.winner_id
+      FROM losers l WHERE d.contact_id = l.loser_id;
+    `);
+    await db.execute(`
+      WITH winners AS (
+        SELECT DISTINCT ON (tenant_id, lower(email)) id, tenant_id, lower(email) AS k
+        FROM crm__contacts
+        WHERE email IS NOT NULL
+        ORDER BY tenant_id, lower(email), created_at ASC
+      ),
+      losers AS (
+        SELECT c.id AS loser_id, w.id AS winner_id
+        FROM crm__contacts c
+        JOIN winners w
+          ON w.tenant_id = c.tenant_id AND w.k = lower(c.email)
+        WHERE c.email IS NOT NULL AND c.id <> w.id
+      )
+      UPDATE crm__activities a SET contact_id = l.winner_id
+      FROM losers l WHERE a.contact_id = l.loser_id;
+    `);
+    await db.execute(`
+      DELETE FROM crm__contacts c
+      WHERE c.email IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM crm__contacts o
+          WHERE o.tenant_id = c.tenant_id
+            AND lower(o.email) = lower(c.email)
+            AND o.created_at < c.created_at
+        );
+    `);
+    await db.execute(`
+      CREATE UNIQUE INDEX IF NOT EXISTS crm__contacts_tenant_email_uniq
+        ON crm__contacts(tenant_id, lower(email))
+        WHERE email IS NOT NULL;
+    `);
+  },
+  async down(db) {
+    await db.execute(`DROP INDEX IF EXISTS crm__contacts_tenant_email_uniq;`);
+  },
+};
+
+// Exactly one default pipeline per tenant — lifecycle.seedPipeline()
+// always inserts one default, but a UI / API call that flips
+// `is_default = true` on a second pipeline without unsetting the first
+// breaks downstream lookups (deals.create picks "the" default, several
+// agents query for it). The partial index makes the DB the authority.
+const uniqueDefaultPipeline: Migration = {
+  id: "005-default-pipeline-uniq",
+  async up(db) {
+    // Coerce any pre-existing tenant that already has more than one
+    // default down to one (oldest wins) so the index can be created.
+    await db.execute(`
+      WITH defaults AS (
+        SELECT id, tenant_id,
+               row_number() OVER (PARTITION BY tenant_id ORDER BY created_at ASC) AS rn
+        FROM crm__pipelines
+        WHERE is_default = true
+      )
+      UPDATE crm__pipelines p SET is_default = false
+      FROM defaults d
+      WHERE p.id = d.id AND d.rn > 1;
+    `);
+    await db.execute(`
+      CREATE UNIQUE INDEX IF NOT EXISTS crm__pipelines_tenant_default_uniq
+        ON crm__pipelines(tenant_id)
+        WHERE is_default = true;
+    `);
+  },
+  async down(db) {
+    await db.execute(`DROP INDEX IF EXISTS crm__pipelines_tenant_default_uniq;`);
+  },
+};
+
 export const crmMigrations: Migration[] = [
   init,
   dedupeCompanyDomain,
   dropKnowledgeFiles,
+  dedupeContactEmail,
+  uniqueDefaultPipeline,
 ];

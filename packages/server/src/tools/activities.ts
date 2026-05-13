@@ -5,7 +5,7 @@
 
 import { z } from "@boringos/module-sdk";
 import type { Tool, ToolContext, ToolResult } from "@boringos/module-sdk";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { activities } from "../schema/activities.js";
 import type { ActivityType } from "@boringos-crm/shared";
 import { type CrmDeps } from "./deps.js";
@@ -48,19 +48,26 @@ export function createActivityTools(deps: CrmDeps): Tool[] {
       if (input.companyId) conds.push(eq(activities.companyId, input.companyId));
       if (input.type) conds.push(eq(activities.type, input.type));
 
-      const rows = await deps.db
-        .select()
-        .from(activities)
-        .where(and(...conds))
-        .orderBy(desc(activities.occurredAt))
-        .limit(input.limit ?? 50)
-        .offset(input.offset ?? 0);
+      const where = and(...conds);
+      const [rows, totalRow] = await Promise.all([
+        deps.db
+          .select()
+          .from(activities)
+          .where(where)
+          .orderBy(desc(activities.occurredAt))
+          .limit(input.limit ?? 50)
+          .offset(input.offset ?? 0),
+        deps.db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(activities)
+          .where(where),
+      ]);
 
       return {
         ok: true,
         result: {
           data: rows,
-          total: rows.length,
+          total: totalRow[0]?.n ?? rows.length,
           limit: input.limit ?? 50,
           offset: input.offset ?? 0,
         },

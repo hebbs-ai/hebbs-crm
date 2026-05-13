@@ -5,7 +5,7 @@
 
 import { z } from "@boringos/module-sdk";
 import type { Tool, ToolContext, ToolResult } from "@boringos/module-sdk";
-import { eq, and, ilike, asc } from "drizzle-orm";
+import { eq, and, ilike, asc, sql } from "drizzle-orm";
 import { deals } from "../schema/deals.js";
 import { pipelines, pipelineStages } from "../schema/pipelines.js";
 import { logActivity, describeDealChanges } from "../activity-logger.js";
@@ -41,17 +41,24 @@ export function createDealTools(deps: CrmDeps): Tool[] {
       if (input.ownerId) conds.push(eq(deals.ownerId, input.ownerId));
       if (input.search) conds.push(ilike(deals.title, `%${input.search}%`));
 
-      const rows = await deps.db
-        .select()
-        .from(deals)
-        .where(and(...conds))
-        .limit(input.limit ?? 50)
-        .offset(input.offset ?? 0);
+      const where = and(...conds);
+      const [rows, totalRow] = await Promise.all([
+        deps.db
+          .select()
+          .from(deals)
+          .where(where)
+          .limit(input.limit ?? 50)
+          .offset(input.offset ?? 0),
+        deps.db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(deals)
+          .where(where),
+      ]);
       return {
         ok: true,
         result: {
           data: rows,
-          total: rows.length,
+          total: totalRow[0]?.n ?? rows.length,
           limit: input.limit ?? 50,
           offset: input.offset ?? 0,
         },

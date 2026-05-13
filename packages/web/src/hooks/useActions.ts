@@ -1,4 +1,12 @@
+// CRM action-queue React hooks. All wire calls go through the v2 tool
+// dispatcher (`/api/tools/crm.actions.<verb>`) — the old REST routes
+// (`/api/crm/actions/...`) were removed when the CRM became a module.
+//
+// Auth is read from the shell's `boringos.token` / `boringos.tenantId`
+// localStorage keys via the shared `api` client.
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api, tool } from "../lib/api";
 
 export interface ActionItem {
   id: string;
@@ -15,24 +23,6 @@ export interface ActionItem {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
-}
-
-function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem("token");
-  const tenantId = localStorage.getItem("tenantId");
-  const h: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) h["Authorization"] = `Bearer ${token}`;
-  if (tenantId) h["X-Tenant-Id"] = tenantId;
-  return h;
-}
-
-async function call<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/crm/actions${path}`, { headers: authHeaders(), ...opts });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed: ${res.status}`);
-  }
-  return res.json();
 }
 
 export interface ActionListOpts {
@@ -55,8 +45,15 @@ function toParams(opts: ActionListOpts = {}): string {
 export function useActions(opts: ActionListOpts = {}) {
   const qs = toParams(opts);
   return useQuery({
-    queryKey: ["actions", "list", opts.status ?? "todo", opts.kind ?? "all", opts.entityType ?? "", opts.entityId ?? ""],
-    queryFn: () => call<{ data: ActionItem[] }>(qs),
+    queryKey: [
+      "actions",
+      "list",
+      opts.status ?? "todo",
+      opts.kind ?? "all",
+      opts.entityType ?? "",
+      opts.entityId ?? "",
+    ],
+    queryFn: () => api.get<{ data: ActionItem[] }>(`/actions${qs}`),
     refetchInterval: 15000, // polling — SSE deferred (framework SSE uses admin key)
   });
 }
@@ -65,7 +62,7 @@ export function useActionCount(opts: { entityType?: ActionListOpts["entityType"]
   const qs = toParams(opts);
   return useQuery({
     queryKey: ["actions", "count", opts.entityType ?? "", opts.entityId ?? ""],
-    queryFn: () => call<{ pending: number }>(`/count${qs}`),
+    queryFn: () => api.get<{ pending: number }>(`/actions/count${qs}`),
     refetchInterval: 15000,
   });
 }
@@ -73,7 +70,7 @@ export function useActionCount(opts: { entityType?: ActionListOpts["entityType"]
 export function useDismissAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => call<{ ok: true }>(`/${id}/dismiss`, { method: "POST" }),
+    mutationFn: (id: string) => api.post<{ id: string; status: string }>(`/actions/${id}/dismiss`, {}),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["actions"] });
     },
@@ -83,7 +80,7 @@ export function useDismissAction() {
 export function useCompleteAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => call<{ ok: true }>(`/${id}/complete`, { method: "POST" }),
+    mutationFn: (id: string) => api.post<{ id: string; status: string }>(`/actions/${id}/complete`, {}),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["actions"] });
     },
@@ -93,13 +90,20 @@ export function useCompleteAction() {
 export function useExecuteAction() {
   const qc = useQueryClient();
   return useMutation({
+    // `params` here mirrors the v1 shape, but the v2 tool expects them at
+    // the top level — pass `params` through directly.
     mutationFn: ({ id, params }: { id: string; params?: Record<string, unknown> }) =>
-      call<{ ok: boolean; detail?: unknown; error?: string }>(`/${id}/execute`, {
-        method: "POST",
-        body: JSON.stringify({ params: params ?? {} }),
-      }),
+      tool<{ kind?: string; messageId?: string; activityId?: string }>(
+        "crm.actions.execute",
+        { id, params: params ?? {} },
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["actions"] });
+      // Activity timeline + dossier listing should refresh too, since
+      // execute now writes a `crm__activities` row for reply / meeting /
+      // log_activity.
+      qc.invalidateQueries({ queryKey: ["activities"] });
+      qc.invalidateQueries({ queryKey: ["dossier"] });
     },
   });
 }
@@ -115,7 +119,7 @@ export interface ActionComment {
 export function useActionComments(id: string, enabled: boolean) {
   return useQuery({
     queryKey: ["actions", id, "comments"],
-    queryFn: () => call<{ data: ActionComment[] }>(`/${id}/comments`),
+    queryFn: () => api.get<{ data: ActionComment[] }>(`/actions/${id}/comments`),
     enabled,
   });
 }
@@ -124,10 +128,10 @@ export function usePostActionComment(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: string) =>
-      call<{ ok: true }>(`/${id}/comments`, {
-        method: "POST",
-        body: JSON.stringify({ body }),
-      }),
+      api.post<{ id: string; targetAgentId: string | null }>(
+        `/actions/${id}/comments`,
+        { body },
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["actions", id, "comments"] });
       qc.invalidateQueries({ queryKey: ["actions"] });
@@ -139,10 +143,13 @@ export function useParentTask(parentId: string | null) {
   return useQuery({
     queryKey: ["actions", "parent", parentId],
     queryFn: async () => {
-      // Use the framework admin tasks endpoint to fetch parent context.
-      // Falls back gracefully if parent isn't accessible.
-      const token = localStorage.getItem("token");
-      const tenantId = localStorage.getItem("tenantId");
+      // Parent tasks live in the framework's `tasks` table — fetched via
+      // the admin route since there's no CRM-side tool that exposes
+      // arbitrary tasks. Auth headers mirror `api.ts`.
+      const token =
+        localStorage.getItem("boringos.token") ?? localStorage.getItem("token");
+      const tenantId =
+        localStorage.getItem("boringos.tenantId") ?? localStorage.getItem("tenantId");
       const res = await fetch(`/api/admin/tasks/${parentId}`, {
         headers: {
           "Content-Type": "application/json",

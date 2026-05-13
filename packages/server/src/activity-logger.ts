@@ -1,10 +1,17 @@
 import { sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { ActivityType } from "@boringos-crm/shared";
+
+// Closed enum so callers can't sneak in arbitrary strings that would
+// break UI filters or kanban groupings downstream.
+const ALLOWED_TYPES = ["call", "email", "meeting", "note", "task"] as const;
 
 interface LogOpts {
   db: PostgresJsDatabase;
   tenantId: string;
   userId?: string;
+  /** Defaults to 'note' for backwards compatibility with every existing call site. */
+  type?: ActivityType;
   subject: string;
   body?: string;
   contactId?: string | null;
@@ -13,15 +20,20 @@ interface LogOpts {
 }
 
 export async function logActivity(opts: LogOpts) {
-  // Raw SQL — never fail the parent tool call.
-  await opts.db.execute(sql`
-    INSERT INTO crm__activities (tenant_id, type, subject, body, contact_id, deal_id, company_id, user_id, occurred_at)
-    VALUES (
-      ${opts.tenantId}, 'note', ${opts.subject}, ${opts.body ?? null},
-      ${opts.contactId ?? null}, ${opts.dealId ?? null}, ${opts.companyId ?? null},
-      ${opts.userId ?? opts.tenantId}, now()
-    )
-  `).catch(() => {});
+  const type: ActivityType =
+    opts.type && (ALLOWED_TYPES as readonly string[]).includes(opts.type)
+      ? opts.type
+      : "note";
+  await opts.db
+    .execute(sql`
+      INSERT INTO crm__activities (tenant_id, type, subject, body, contact_id, deal_id, company_id, user_id, occurred_at)
+      VALUES (
+        ${opts.tenantId}, ${type}, ${opts.subject}, ${opts.body ?? null},
+        ${opts.contactId ?? null}, ${opts.dealId ?? null}, ${opts.companyId ?? null},
+        ${opts.userId ?? opts.tenantId}, now()
+      )
+    `)
+    .catch(() => {});
 }
 
 /**

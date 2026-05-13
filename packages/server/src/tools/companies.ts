@@ -5,7 +5,7 @@
 
 import { z } from "@boringos/module-sdk";
 import type { Tool, ToolContext, ToolResult } from "@boringos/module-sdk";
-import { eq, and, ilike, or } from "drizzle-orm";
+import { eq, and, ilike, or, sql } from "drizzle-orm";
 import { companies } from "../schema/companies.js";
 import { logActivity } from "../activity-logger.js";
 import { emitCrm, type CrmDeps } from "./deps.js";
@@ -40,17 +40,24 @@ export function createCompanyTools(deps: CrmDeps): Tool[] {
           )!,
         );
       }
-      const rows = await deps.db
-        .select()
-        .from(companies)
-        .where(and(...conds))
-        .limit(input.limit ?? 50)
-        .offset(input.offset ?? 0);
+      const where = and(...conds);
+      const [rows, totalRow] = await Promise.all([
+        deps.db
+          .select()
+          .from(companies)
+          .where(where)
+          .limit(input.limit ?? 50)
+          .offset(input.offset ?? 0),
+        deps.db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(companies)
+          .where(where),
+      ]);
       return {
         ok: true,
         result: {
           data: rows,
-          total: rows.length,
+          total: totalRow[0]?.n ?? rows.length,
           limit: input.limit ?? 50,
           offset: input.offset ?? 0,
         },

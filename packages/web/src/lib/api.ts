@@ -158,7 +158,7 @@ function translate(method: string, fullPath: string, body?: unknown): Translatio
     case "actions": {
       if (rest.length === 0 && m === "GET") return { toolName: "crm.actions.list", input: query };
       if (rest.length === 1 && rest[0] === "count" && m === "GET")
-        return { toolName: "crm.actions.count_pending", input: {} };
+        return { toolName: "crm.actions.count_pending", input: query };
       if (rest.length === 2) {
         const id = rest[0];
         if (rest[1] === "dismiss" && m === "POST") return { toolName: "crm.actions.dismiss", input: { id } };

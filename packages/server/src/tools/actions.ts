@@ -15,7 +15,14 @@ import { z } from "@boringos/module-sdk";
 import type { Tool, ToolContext, ToolResult } from "@boringos/module-sdk";
 import { sql } from "drizzle-orm";
 import { getGmailClient, getCalendarClient } from "../google-client.js";
+import { logActivity } from "../activity-logger.js";
+import {
+  resolveContactByEmail,
+  resolveInboxItemEntities,
+} from "../inbox-resolve.js";
 import { emitCrm, type CrmDeps } from "./deps.js";
+
+const ALLOWED_ACTIVITY_TYPES = new Set(["call", "email", "meeting", "note", "task"]);
 
 type EntityType = "contact" | "deal" | "company";
 
@@ -75,22 +82,31 @@ export function createActionTools(deps: CrmDeps): Tool[] {
 
       const where = filters.reduce((acc, f, i) => (i === 0 ? f : sql`${acc} AND ${f}`));
 
-      const result = await deps.db.execute(sql`
-        SELECT id, title, description, status, priority, origin_kind as "originKind",
-               assignee_user_id as "assigneeUserId", assignee_agent_id as "assigneeAgentId",
-               parent_id as "parentId", proposed_params as "proposedParams",
-               created_by_agent_id as "createdByAgentId",
-               created_at as "createdAt", updated_at as "updatedAt", completed_at as "completedAt"
-        FROM tasks
-        WHERE ${where}
-        ORDER BY created_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `);
+      const [result, totalResult] = await Promise.all([
+        deps.db.execute(sql`
+          SELECT id, title, description, status, priority, origin_kind as "originKind",
+                 assignee_user_id as "assigneeUserId", assignee_agent_id as "assigneeAgentId",
+                 parent_id as "parentId", proposed_params as "proposedParams",
+                 created_by_agent_id as "createdByAgentId",
+                 created_at as "createdAt", updated_at as "updatedAt", completed_at as "completedAt"
+          FROM tasks
+          WHERE ${where}
+          ORDER BY created_at DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `),
+        deps.db.execute(sql`SELECT count(*)::int AS n FROM tasks WHERE ${where}`),
+      ]);
       const rows = result as unknown as Array<Record<string, unknown>>;
+      const totalRows = totalResult as unknown as Array<{ n: number }>;
 
       return {
         ok: true,
-        result: { data: rows, total: rows.length, limit, offset },
+        result: {
+          data: rows,
+          total: totalRows[0]?.n ?? rows.length,
+          limit,
+          offset,
+        },
       };
     },
   };
@@ -184,12 +200,13 @@ export function createActionTools(deps: CrmDeps): Tool[] {
       ctx: ToolContext,
     ): Promise<ToolResult> {
       const taskRows = (await deps.db.execute(sql`
-        SELECT id, tenant_id as "tenantId", origin_kind as "originKind",
+        SELECT id, title, tenant_id as "tenantId", origin_kind as "originKind",
                proposed_params as "proposedParams"
         FROM tasks
         WHERE id = ${input.id}
         LIMIT 1
       `)) as unknown as Array<{
+        title: string;
         tenantId: string;
         originKind: string;
         proposedParams: Record<string, unknown> | null;
@@ -230,7 +247,13 @@ export function createActionTools(deps: CrmDeps): Tool[] {
 
       let dispatch: { ok: boolean; detail?: unknown; error?: string };
       try {
-        dispatch = await executeAction(deps, ctx.tenantId, input.actorUserId, kind, params);
+        dispatch = await executeAction(deps, {
+          tenantId: ctx.tenantId,
+          userId: input.actorUserId,
+          kind,
+          params,
+          taskTitle: task.title ?? null,
+        });
       } catch (err) {
         dispatch = { ok: false, error: err instanceof Error ? err.message : String(err) };
       }
@@ -399,34 +422,35 @@ async function ensureActionInTenant(
   return { ok: true };
 }
 
+interface ExecOpts {
+  tenantId: string;
+  userId: string | undefined;
+  kind: string | undefined;
+  params: Record<string, unknown>;
+  /** Used as default `subject` for log_activity when the agent omitted one. */
+  taskTitle: string | null;
+}
+
 /**
- * Dispatch on params.kind. Mirrors v1 routes/actions.ts logic.
- *
- * - log_activity: insert into crm__activities (note the double
- *   underscore — this package's actual table; v1 had a typo).
- * - reply: Gmail thread reply via the inbox item.
- * - schedule_meeting: Google Calendar event.
- * - resume_workflow: not supported in v2 tools (no workflow engine
- *   handle in CrmDeps); returns a clear error so the caller can
- *   route it through framework.workflow.resume instead.
+ * Dispatch on params.kind. Mirrors v1 routes/actions.ts logic with one
+ * crucial fix: every successful `reply` / `schedule_meeting` also writes
+ * a typed `crm__activities` row linked to the right entities, so the
+ * Contact/Deal/Company timelines stay in sync.
  */
 async function executeAction(
   deps: CrmDeps,
-  tenantId: string,
-  userId: string | undefined,
-  kind: string | undefined,
-  params: Record<string, unknown>,
+  opts: ExecOpts,
 ): Promise<{ ok: boolean; detail?: unknown; error?: string }> {
+  const { tenantId, userId, kind, params, taskTitle } = opts;
   switch (kind) {
     case "log_activity": {
       const {
-        type = "note",
-        subject,
+        type: rawType,
+        subject: rawSubject,
         body,
         contactId,
         dealId,
         companyId,
-        occurredAt,
       } = params as {
         type?: string;
         subject?: string;
@@ -434,21 +458,27 @@ async function executeAction(
         contactId?: string;
         dealId?: string;
         companyId?: string;
-        occurredAt?: string;
       };
-      if (!subject) return { ok: false, error: "log_activity requires `subject`" };
-      const { randomUUID } = await import("node:crypto");
-      const id = randomUUID();
-      await deps.db.execute(sql`
-        INSERT INTO crm__activities (
-          id, tenant_id, type, subject, body, contact_id, deal_id, company_id, user_id, occurred_at
-        ) VALUES (
-          ${id}, ${tenantId}, ${type}, ${subject}, ${body ?? null},
-          ${contactId ?? null}, ${dealId ?? null}, ${companyId ?? null},
-          ${userId ?? tenantId}, ${occurredAt ?? new Date().toISOString()}
-        )
-      `);
-      return { ok: true, detail: { activityId: id } };
+      const type = ALLOWED_ACTIVITY_TYPES.has(rawType ?? "")
+        ? (rawType as "call" | "email" | "meeting" | "note" | "task")
+        : "note";
+      // Don't reject when the agent omitted `subject` — fall back to the
+      // task title (it carries the agent's intent), then to a static
+      // default. v1's hard "requires subject" error was a frequent cause
+      // of stuck `agent_action` rows on the queue.
+      const subject = (rawSubject?.trim() || taskTitle?.trim() || "Activity").slice(0, 500);
+      await logActivity({
+        db: deps.db,
+        tenantId,
+        userId,
+        type,
+        subject,
+        body,
+        contactId,
+        dealId,
+        companyId,
+      });
+      return { ok: true, detail: { logged: true, type, subject } };
     }
 
     case "reply": {
@@ -488,17 +518,61 @@ async function executeAction(
         body,
       });
       if (!r.success) return { ok: false, error: r.error ?? "Gmail reply failed" };
-      return { ok: true, detail: { messageId: r.data?.id } };
+
+      // Mirror inbox.reply: log an email activity linked to the right
+      // contact/deal/company so the timeline updates.
+      const linked = await resolveInboxItemEntities(deps.db, tenantId, inboxItemId);
+      await logActivity({
+        db: deps.db,
+        tenantId,
+        userId,
+        type: "email",
+        subject: `Replied: ${item.subject ?? "(no subject)"}`,
+        body,
+        contactId: linked.contactId,
+        dealId: linked.dealId,
+        companyId: linked.companyId,
+      });
+      emitCrm(deps, "inbox.reply_sent", tenantId, {
+        itemId: inboxItemId,
+        to: toEmail,
+        messageId: (r.data as { id?: string } | undefined)?.id,
+        contactId: linked.contactId,
+        dealId: linked.dealId,
+        companyId: linked.companyId,
+      });
+      return {
+        ok: true,
+        detail: {
+          messageId: (r.data as { id?: string } | undefined)?.id,
+          contactId: linked.contactId,
+          dealId: linked.dealId,
+          companyId: linked.companyId,
+        },
+      };
     }
 
     case "schedule_meeting": {
-      const { summary, startTime, endTime, attendees, description, timeZone } = params as {
+      const {
+        summary,
+        startTime,
+        endTime,
+        attendees,
+        description,
+        timeZone,
+        contactId,
+        dealId,
+        companyId,
+      } = params as {
         summary?: string;
         startTime?: string;
         endTime?: string;
         attendees?: string[];
         description?: string;
         timeZone?: string;
+        contactId?: string;
+        dealId?: string;
+        companyId?: string;
       };
       if (!summary || !startTime || !endTime) {
         return { ok: false, error: "schedule_meeting requires summary, startTime, endTime" };
@@ -518,17 +592,41 @@ async function executeAction(
       if (!r.success) {
         return { ok: false, error: r.error ?? "Calendar create_event failed" };
       }
+
+      // Try to resolve entities for the activity link. Caller-provided
+      // ids win; otherwise look up the first attendee email.
+      let linkedContact = contactId ?? null;
+      let linkedDeal = dealId ?? null;
+      let linkedCompany = companyId ?? null;
+      if (!linkedContact && attendees?.length) {
+        const resolved = await resolveContactByEmail(deps.db, tenantId, attendees[0]);
+        linkedContact = resolved.contactId;
+        linkedDeal = linkedDeal ?? resolved.dealId;
+        linkedCompany = linkedCompany ?? resolved.companyId;
+      }
+      await logActivity({
+        db: deps.db,
+        tenantId,
+        userId,
+        type: "meeting",
+        subject: `Scheduled: ${summary}`,
+        body: description,
+        contactId: linkedContact,
+        dealId: linkedDeal,
+        companyId: linkedCompany,
+      });
       return { ok: true, detail: r.data };
     }
 
     case "resume_workflow": {
-      // v1 had a direct ctx.workflowEngine handle. In v2 the
-      // workflow engine is not part of CrmDeps — callers should
-      // route this through the framework.workflow.resume tool.
+      // The framework explicitly removed wait-for-human workflow resume
+      // (see boringos-framework admin-routes /workflow-runs/:id/resume).
+      // Agents should use an `agent_action` task + comment to unblock
+      // themselves instead.
       return {
         ok: false,
         error:
-          "resume_workflow not supported by crm.actions.execute in v2; call framework.workflow.resume directly",
+          "resume_workflow is no longer supported. Use a comment on an agent_action task instead so the assignee agent wakes via crm.comment.posted.",
       };
     }
 
