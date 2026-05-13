@@ -7,7 +7,7 @@ import { z } from "@boringos/module-sdk";
 import type { Tool, ToolContext, ToolResult } from "@boringos/module-sdk";
 import { eq, and, ilike, or, sql } from "drizzle-orm";
 import { companies } from "../schema/companies.js";
-import { logActivity } from "../activity-logger.js";
+import { logActivity, describeCompanyChanges } from "../activity-logger.js";
 import { emitCrm, type CrmDeps } from "./deps.js";
 
 export function createCompanyTools(deps: CrmDeps): Tool[] {
@@ -225,6 +225,19 @@ export function createCompanyTools(deps: CrmDeps): Tool[] {
       ctx: ToolContext,
     ): Promise<ToolResult> {
       const { id, actorUserId, ...patch } = input;
+
+      const [old] = await deps.db
+        .select()
+        .from(companies)
+        .where(and(eq(companies.id, id), eq(companies.tenantId, ctx.tenantId)))
+        .limit(1);
+      if (!old) {
+        return {
+          ok: false,
+          error: { code: "not_found", message: "Company not found", retryable: false },
+        };
+      }
+
       const [updated] = await deps.db
         .update(companies)
         .set({ ...patch, updatedAt: new Date() })
@@ -238,13 +251,25 @@ export function createCompanyTools(deps: CrmDeps): Tool[] {
         };
       }
 
-      await logActivity({
-        db: deps.db,
-        tenantId: ctx.tenantId,
-        userId: actorUserId,
-        subject: `Company updated: ${updated.name}`,
-        companyId: updated.id,
-      });
+      const changeDesc = describeCompanyChanges(
+        old as unknown as Record<string, unknown>,
+        patch as unknown as Record<string, unknown>,
+      );
+      if (changeDesc) {
+        await logActivity({
+          db: deps.db,
+          tenantId: ctx.tenantId,
+          userId: actorUserId,
+          subject: `Company updated: ${updated.name}`,
+          body: changeDesc,
+          companyId: updated.id,
+        });
+        emitCrm(deps, "entity.updated", ctx.tenantId, {
+          entityType: "crm_company",
+          entityId: updated.id,
+          changes: changeDesc,
+        });
+      }
 
       return { ok: true, result: { data: updated } };
     },
@@ -273,11 +298,20 @@ export function createCompanyTools(deps: CrmDeps): Tool[] {
         };
       }
 
+      // companyId is null because the company row is gone — keeping
+      // the entity name + id in the body so the deletion still shows
+      // up in tenant-wide activity feeds.
       await logActivity({
         db: deps.db,
         tenantId: ctx.tenantId,
         userId: input.actorUserId,
         subject: `Company deleted: ${deleted.name}`,
+        body: `Removed ${deleted.name} (${deleted.domain ?? "no domain"}). Id: ${deleted.id}`,
+      });
+
+      emitCrm(deps, "entity.deleted", ctx.tenantId, {
+        entityType: "crm_company",
+        entityId: deleted.id,
       });
 
       return { ok: true, result: { data: deleted } };

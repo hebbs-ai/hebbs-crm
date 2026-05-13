@@ -15,6 +15,8 @@ import { createActivityTools } from "./activities.js";
 import { createInboxTools } from "./inbox.js";
 import { createProfileTools } from "./profile.js";
 import { createActionTools } from "./actions.js";
+import { createCalendarTools } from "./calendar.js";
+import { createRoutineTools } from "./routines.js";
 import type { CrmDeps } from "./deps.js";
 
 export function createCrmTools(deps: CrmDeps): Tool[] {
@@ -27,5 +29,7 @@ export function createCrmTools(deps: CrmDeps): Tool[] {
     ...createInboxTools(deps),
     ...createProfileTools(deps),
     ...createActionTools(deps),
+    ...createCalendarTools(deps),
+    ...createRoutineTools(deps),
   ];
 }

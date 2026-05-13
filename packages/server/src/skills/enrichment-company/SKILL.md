@@ -6,7 +6,7 @@ requires:
   - crm.companies.get
   - crm.companies.update
   - crm.contacts.list
-  - framework.tasks.list
+  - framework.tasks.read
   - framework.tasks.patch
   - framework.tasks.create
   - framework.comments.post
@@ -37,27 +37,30 @@ your callback token.
 
 ## When You Wake
 
-You may have MULTIPLE pending tasks. First, list ALL your tasks:
-
-```
-curl -X POST $BORINGOS_CALLBACK_URL/api/tools/framework.tasks.list \
-  -H "Authorization: Bearer $BORINGOS_CALLBACK_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "todo"}'
-```
-
-Decide what kind of task each one is and handle accordingly:
+The framework injects the task that woke you under `## Task` in your
+prompt. Inspect that block first — its description tells you which
+mode to run in:
 
 - **Enrichment task** — description contains "Research and enrich
-  company: <entity-id>". Run the full Step 1–8 enrichment flow
+  company: <COMPANY_ID>". Run the full Step 1–8 enrichment flow
   below.
 - **Reply-follow-up task** — a `human_todo` you created in Step 8
   that now has a user comment on it. The user answered your open
   question. Jump to "## Handling User Replies" at the end. Do NOT
   re-run enrichment.
 
-Process EVERY todo task, not just the one that triggered this wake.
-Mark each as done when handled.
+If you need to re-read the task body or its comments mid-run, call
+`framework.tasks.read`:
+
+```
+curl -X POST "$BORINGOS_CALLBACK_URL/api/tools/framework.tasks.read" \
+  -H "Authorization: Bearer $BORINGOS_CALLBACK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"taskId": "TASK_ID"}'
+```
+
+The framework auto-rewakes you while you still have pending todos —
+finish your current task end-to-end, then end the run.
 
 ## For Each Company Task
 
@@ -305,8 +308,11 @@ curl -X POST $BORINGOS_CALLBACK_URL/api/tools/framework.tasks.create \
   the App APIs section): `log_activity` for follow-up reminders,
   `schedule_meeting` for proposed slots
 
-**Idempotency:** call `framework.tasks.list` with `{"status": "todo"}`
-and skip duplicates for the same companyId + kind.
+**Idempotency:** the framework rewakes you for each enrichment task
+individually — your wake-task injection delivers one task at a time.
+Use `hebbs recall --entity-id company-<UUID>` to surface previously
+emitted follow-up task ids before creating a new one for the same
+company + kind.
 
 A dossier without 2–4 proposed actions is incomplete output for
 this role — the leadership and timing lenses almost always yield

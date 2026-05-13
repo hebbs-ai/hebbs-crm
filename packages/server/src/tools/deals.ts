@@ -327,8 +327,14 @@ export function createDealTools(deps: CrmDeps): Tool[] {
         tenantId: ctx.tenantId,
         userId: input.actorUserId,
         subject: `Deal deleted: ${deleted.title}`,
+        body: `Removed ${deleted.title}. Id: ${deleted.id}`,
         contactId: deleted.contactId,
         companyId: deleted.companyId,
+      });
+
+      emitCrm(deps, "entity.deleted", ctx.tenantId, {
+        entityType: "crm_deal",
+        entityId: deleted.id,
       });
 
       return { ok: true, result: { data: deleted } };

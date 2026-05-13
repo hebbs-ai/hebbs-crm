@@ -44,6 +44,9 @@ const CRM_WORKFLOW_NAMES = [
   "Calendar Check",
   "CRM lens on classified inbox items",
   "Activate sync routines on Google connect",
+  // "Prep upcoming meetings" was folded into Calendar Check in v0.3 —
+  // kept in the uninstall list so old installs still get cleaned up
+  // on re-install via scrubCrmSeeds().
   "Prep upcoming meetings",
   "Enrich new contact",
   "Enrich new company",
@@ -431,60 +434,57 @@ async function seedWorkflows(
   agents: SeededAgents,
 ): Promise<{ emailWorkflowId: string; calCheckWorkflowId: string }> {
   const emailLensAgentId = agents.emailLensId;
-  const emailWorkflowId = randomUUID();
-  const emailBlocks = [
-    { id: "trigger", name: "trigger", type: "trigger", config: {} },
-    {
-      id: "fetch",
-      name: "fetch",
-      type: "connector-action",
-      config: { connectorKind: "google", action: "list_emails", inputs: { maxResults: 20 } },
-    },
-    {
-      id: "loop",
-      name: "loop",
-      type: "for-each",
-      config: { items: "{{fetch.messages}}" },
-    },
-    {
-      id: "store",
-      name: "store",
-      type: "create-inbox-item",
-      config: { source: "gmail", items: "{{loop.items}}" },
-    },
-  ];
-  const emailEdges = [
-    { id: "e1", sourceBlockId: "trigger", targetBlockId: "fetch", sourceHandle: null, sortOrder: 0 },
-    { id: "e2", sourceBlockId: "fetch", targetBlockId: "loop", sourceHandle: null, sortOrder: 0 },
-    { id: "e3", sourceBlockId: "loop", targetBlockId: "store", sourceHandle: null, sortOrder: 0 },
-  ];
-  await insertWorkflow(db, tenantId, emailWorkflowId, "Email Sync", emailBlocks, emailEdges);
 
-  const calCheckWorkflowId = randomUUID();
-  const calCheckBlocks = [
-    { id: "trigger", name: "trigger", type: "trigger", config: {} },
-    {
-      id: "fetch",
-      name: "fetch",
-      type: "connector-action",
-      config: { connectorKind: "google", action: "list_events", inputs: { maxResults: 10, timeMin: "NOW" } },
-    },
-    {
-      id: "emit",
-      name: "emit",
-      type: "emit-event",
-      config: {
-        connectorKind: "calendar",
-        eventType: "calendar.upcoming_events",
-        data: { events: "{{fetch.events}}" },
+  // Email Sync — collapses the old 4-block (trigger→connector-action
+  // →for-each→create-inbox-item) DAG that used unsupported v2 block
+  // kinds into one tool block calling `crm.inbox.sync`. The tool
+  // already fetches Gmail, dedupes, inserts inbox_items, auto-creates
+  // leads, and emits `inbox.item_created` so triage wakes.
+  const emailWorkflowId = randomUUID();
+  await insertWorkflow(
+    db,
+    tenantId,
+    emailWorkflowId,
+    "Email Sync",
+    [
+      { id: "trigger", name: "trigger", kind: "trigger", type: "trigger", config: {} },
+      {
+        id: "sync",
+        name: "sync",
+        kind: "tool",
+        type: "tool",
+        tool: "crm.inbox.sync",
+        inputs: { maxResults: 20 },
+        config: {},
       },
-    },
-  ];
-  const calCheckEdges = [
-    { id: "e1", sourceBlockId: "trigger", targetBlockId: "fetch", sourceHandle: null, sortOrder: 0 },
-    { id: "e2", sourceBlockId: "fetch", targetBlockId: "emit", sourceHandle: null, sortOrder: 0 },
-  ];
-  await insertWorkflow(db, tenantId, calCheckWorkflowId, "Calendar Check", calCheckBlocks, calCheckEdges);
+    ],
+    [{ id: "e1", sourceBlockId: "trigger", targetBlockId: "sync", sourceHandle: null, sortOrder: 0 }],
+  );
+
+  // Calendar Check — same collapse pattern. `crm.calendar.sync_prep`
+  // lists upcoming events and seeds one task per event with the
+  // meeting-prep agent pre-assigned (the framework's task runner
+  // wakes the assignee on its own).
+  const calCheckWorkflowId = randomUUID();
+  await insertWorkflow(
+    db,
+    tenantId,
+    calCheckWorkflowId,
+    "Calendar Check",
+    [
+      { id: "trigger", name: "trigger", kind: "trigger", type: "trigger", config: {} },
+      {
+        id: "sync",
+        name: "sync",
+        kind: "tool",
+        type: "tool",
+        tool: "crm.calendar.sync_prep",
+        inputs: { maxResults: 10, lookaheadHours: 24 },
+        config: {},
+      },
+    ],
+    [{ id: "e1", sourceBlockId: "trigger", targetBlockId: "sync", sourceHandle: null, sortOrder: 0 }],
+  );
 
   // CRM Email Lens — wakes on triage.classified. v2 block model:
   // a `tool` block calling framework.agents.wake with the seeded
@@ -509,86 +509,47 @@ async function seedWorkflows(
     [{ id: "e1", sourceBlockId: "trigger", targetBlockId: "wake", sourceHandle: null, sortOrder: 0 }],
   );
 
-  // Activate sync routines on Google connect.
+  // Activate sync routines on Google connect — rewritten to use the
+  // `crm.routines.activate_sync` tool (the v2 engine has no
+  // `update-row` block kind). The condition still gates on the
+  // connector kind so non-Google connects don't accidentally
+  // un-pause our sync routines.
   await insertWorkflow(
     db,
     tenantId,
     randomUUID(),
     "Activate sync routines on Google connect",
     [
-      { id: "trigger", name: "trigger", type: "trigger", config: { eventType: "connector.connected" } },
+      { id: "trigger", name: "trigger", kind: "trigger", type: "trigger", config: { eventType: "connector.connected" } },
       {
         id: "guard",
         name: "guard",
+        kind: "condition",
         type: "condition",
         config: { field: "{{trigger.kind}}", operator: "equals", value: "google" },
       },
       {
-        id: "unpause_sync",
-        name: "unpause_sync",
-        type: "update-row",
-        config: {
-          table: "routines",
-          where: { status: "paused", title: { op: "ilike", value: "%Sync%" } },
-          set: { status: "active" },
-        },
-      },
-      {
-        id: "unpause_calendar",
-        name: "unpause_calendar",
-        type: "update-row",
-        config: {
-          table: "routines",
-          where: { status: "paused", title: { op: "ilike", value: "%Calendar Check%" } },
-          set: { status: "active" },
-        },
+        id: "activate",
+        name: "activate",
+        kind: "tool",
+        type: "tool",
+        tool: "crm.routines.activate_sync",
+        inputs: {},
+        config: {},
       },
     ],
     [
-      // The framework's workflow engine sets selectedHandle to "true"/"false"
-      // after a condition block (workflow.ts:353); "condition-true" used to
-      // be silently pruned, which left Email Sync + Calendar Check paused
-      // forever after the user connected Google.
       { id: "e1", sourceBlockId: "trigger", targetBlockId: "guard", sourceHandle: null, sortOrder: 0 },
-      { id: "e2", sourceBlockId: "guard", targetBlockId: "unpause_sync", sourceHandle: "true", sortOrder: 0 },
-      { id: "e3", sourceBlockId: "guard", targetBlockId: "unpause_calendar", sourceHandle: "true", sortOrder: 1 },
+      { id: "e2", sourceBlockId: "guard", targetBlockId: "activate", sourceHandle: "true", sortOrder: 0 },
     ],
   );
 
-  // Meeting prep workflow.
-  await insertWorkflow(
-    db,
-    tenantId,
-    randomUUID(),
-    "Prep upcoming meetings",
-    [
-      { id: "trigger", name: "trigger", type: "trigger", config: { eventType: "calendar.upcoming_events" } },
-      { id: "loop", name: "loop", type: "for-each", config: { items: "{{trigger.events}}" } },
-      {
-        id: "task",
-        name: "task",
-        type: "create-task",
-        config: {
-          title: "Meeting prep: {{loop.summary}}",
-          description: "Prep for {{loop.summary}} starting {{loop.start.dateTime}}",
-          originKind: "agent-meeting-prep",
-          originId: "{{loop.id}}",
-          dedup: true,
-        },
-      },
-      {
-        id: "wake",
-        name: "wake",
-        type: "wake-agent",
-        config: { agentRole: "meeting-prep", reason: "calendar_event", taskId: "{{task.taskId}}" },
-      },
-    ],
-    [
-      { id: "e1", sourceBlockId: "trigger", targetBlockId: "loop", sourceHandle: null, sortOrder: 0 },
-      { id: "e2", sourceBlockId: "loop", targetBlockId: "task", sourceHandle: null, sortOrder: 0 },
-      { id: "e3", sourceBlockId: "task", targetBlockId: "wake", sourceHandle: null, sortOrder: 0 },
-    ],
-  );
+  // "Prep upcoming meetings" is no longer a separate workflow — the
+  // Calendar Check tool now seeds the prep tasks inline (one tool
+  // call per cron tick is simpler than chaining for_each + create-
+  // task + wake-agent, and the v2 engine doesn't support those
+  // legacy block kinds anyway).
+  void agents.meetingPrepId;
 
   // Enrich new contact / company / Analyze new deal — v2 tool
   // blocks. The framework.tasks.create tool auto-wakes the
@@ -722,11 +683,17 @@ async function seedRoutines(
   const emailWorkflowId = await lookup("Email Sync");
   const calWorkflowId = await lookup("Calendar Check");
 
+  // Both sync routines start ACTIVE in v0.3 — the underlying tools
+  // (`crm.inbox.sync` / `crm.calendar.sync_prep`) handle "no Google
+  // connector" gracefully with a soft no-op, so we no longer need
+  // the connector-gated activation dance. The "Activate sync
+  // routines on Google connect" workflow still exists for legacy
+  // installs that have paused routines.
   if (emailWorkflowId) {
     await db.execute(sql`
       INSERT INTO routines (id, tenant_id, title, workflow_id, cron_expression, status, created_at, updated_at)
       VALUES (${randomUUID()}, ${tenantId}, 'Email Sync (every 15 min)', ${emailWorkflowId},
-        '*/15 * * * *', 'paused', now(), now())
+        '*/15 * * * *', 'active', now(), now())
     `);
   }
 
@@ -734,7 +701,7 @@ async function seedRoutines(
     await db.execute(sql`
       INSERT INTO routines (id, tenant_id, title, workflow_id, cron_expression, status, created_at, updated_at)
       VALUES (${randomUUID()}, ${tenantId}, 'Calendar Check (every 30 min)', ${calWorkflowId},
-        '*/30 * * * *', 'paused', now(), now())
+        '*/30 * * * *', 'active', now(), now())
     `);
   }
 

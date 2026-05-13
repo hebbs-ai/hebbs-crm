@@ -151,7 +151,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
             await db.execute(sql`
               UPDATE inbox_items
               SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ threadId })}::jsonb
-              WHERE id = ${itemId}
+              WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
             `);
           }
         }
@@ -191,7 +191,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
           || ${JSON.stringify({ threadMessages, bodyHtml })}::jsonb,
           body = COALESCE(${bodyPlain}, body),
           updated_at = now()
-        WHERE id = ${itemId}
+        WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
       `);
 
       return { ok: true, result: { threadMessages } };
@@ -400,7 +400,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
 
       await db.execute(sql`
         UPDATE inbox_items SET status = 'archived', archived_at = now(), updated_at = now()
-        WHERE id = ${itemId}
+        WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
       `);
 
       emitCrm(deps, "inbox.archived", ctx.tenantId, { itemId });
@@ -515,7 +515,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
                 autoCreated: linked.created,
               },
             })}::jsonb
-            WHERE id = ${itemId}
+            WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
           `);
         }
       }
@@ -524,7 +524,9 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
       let threadsBackfilled = 0;
       for (const itemId of itemIds) {
         const itemRows = (await db.execute(sql`
-          SELECT metadata FROM inbox_items WHERE id = ${itemId}
+          SELECT metadata FROM inbox_items
+          WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
+          LIMIT 1
         `)) as unknown as Array<{ metadata: Record<string, unknown> }>;
         const threadId = itemRows[0]?.metadata?.threadId as string;
         if (!threadId) continue;
@@ -540,7 +542,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
           SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ threadMessages, bodyHtml: latestMsg?.bodyHtml })}::jsonb,
             body = COALESCE(${latestMsg?.bodyPlain}, body),
             updated_at = now()
-          WHERE id = ${itemId}
+          WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
         `);
         threadsBackfilled++;
       }
@@ -623,7 +625,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
               await db.execute(sql`
                 UPDATE inbox_items
                 SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ threadId: tid })}::jsonb
-                WHERE id = ${item.id}
+                WHERE id = ${item.id} AND tenant_id = ${ctx.tenantId}
               `);
             }
           }
@@ -657,7 +659,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
               SET metadata = COALESCE(metadata, '{}'::jsonb) || ${patch}::jsonb,
                 body = COALESCE(${bodyPlain}, body),
                 updated_at = now()
-              WHERE id = ${id}
+              WHERE id = ${id} AND tenant_id = ${ctx.tenantId}
             `);
             updated++;
           }
@@ -738,7 +740,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
 
           await db.execute(sql`
             UPDATE inbox_items SET body = ${body}, updated_at = now()
-            WHERE id = ${item.id}
+            WHERE id = ${item.id} AND tenant_id = ${ctx.tenantId}
           `);
           updated++;
         } catch (err) {
@@ -838,7 +840,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
               autoCreated: linked.created,
             },
           })}::jsonb
-          WHERE id = ${itemId}
+          WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
         `);
       }
 

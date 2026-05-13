@@ -7,7 +7,7 @@ import { z } from "@boringos/module-sdk";
 import type { Tool, ToolContext, ToolResult } from "@boringos/module-sdk";
 import { eq, and, ilike, or, sql } from "drizzle-orm";
 import { contacts } from "../schema/contacts.js";
-import { logActivity } from "../activity-logger.js";
+import { logActivity, describeContactChanges } from "../activity-logger.js";
 import { emitCrm, type CrmDeps } from "./deps.js";
 
 export function createContactTools(deps: CrmDeps): Tool[] {
@@ -196,6 +196,19 @@ export function createContactTools(deps: CrmDeps): Tool[] {
       ctx: ToolContext,
     ): Promise<ToolResult> {
       const { id, actorUserId, ...patch } = input;
+
+      const [old] = await deps.db
+        .select()
+        .from(contacts)
+        .where(and(eq(contacts.id, id), eq(contacts.tenantId, ctx.tenantId)))
+        .limit(1);
+      if (!old) {
+        return {
+          ok: false,
+          error: { code: "not_found", message: "Contact not found", retryable: false },
+        };
+      }
+
       const [updated] = await deps.db
         .update(contacts)
         .set({ ...patch, updatedAt: new Date() })
@@ -209,14 +222,27 @@ export function createContactTools(deps: CrmDeps): Tool[] {
         };
       }
 
-      await logActivity({
-        db: deps.db,
-        tenantId: ctx.tenantId,
-        userId: actorUserId,
-        subject: `Contact updated: ${updated.firstName} ${updated.lastName ?? ""}`.trim(),
-        contactId: updated.id,
-        companyId: updated.companyId,
-      });
+      const changeDesc = describeContactChanges(
+        old as unknown as Record<string, unknown>,
+        patch as unknown as Record<string, unknown>,
+      );
+      if (changeDesc) {
+        await logActivity({
+          db: deps.db,
+          tenantId: ctx.tenantId,
+          userId: actorUserId,
+          subject: `Contact updated: ${updated.firstName} ${updated.lastName ?? ""}`.trim(),
+          body: changeDesc,
+          contactId: updated.id,
+          companyId: updated.companyId,
+        });
+        // Lets enrichment / dashboard listeners react to mutations.
+        emitCrm(deps, "entity.updated", ctx.tenantId, {
+          entityType: "crm_contact",
+          entityId: updated.id,
+          changes: changeDesc,
+        });
+      }
 
       return { ok: true, result: { data: updated } };
     },
@@ -245,12 +271,24 @@ export function createContactTools(deps: CrmDeps): Tool[] {
         };
       }
 
+      const fullName = `${deleted.firstName} ${deleted.lastName ?? ""}`.trim();
+      // The contact row is gone — contactId is null because the FK
+      // would dangle. We keep companyId so the timeline still shows
+      // the deletion under the company's tab, plus a body line that
+      // names the contact and its now-stale id.
       await logActivity({
         db: deps.db,
         tenantId: ctx.tenantId,
         userId: input.actorUserId,
-        subject: `Contact deleted: ${deleted.firstName} ${deleted.lastName ?? ""}`.trim(),
+        subject: `Contact deleted: ${fullName}`,
+        body: `Removed ${fullName} (${deleted.email ?? "no email"}). Id: ${deleted.id}`,
+        contactId: null,
         companyId: deleted.companyId,
+      });
+
+      emitCrm(deps, "entity.deleted", ctx.tenantId, {
+        entityType: "crm_contact",
+        entityId: deleted.id,
       });
 
       return { ok: true, result: { data: deleted } };

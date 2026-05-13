@@ -2,12 +2,15 @@
 //
 // L9 — Pipeline configuration settings panel.
 //
-// Wires to the existing /api/crm/pipelines routes. v1 supports add /
-// remove / reorder / probability edit on the default sales pipeline.
-// Drag-and-drop reordering can be added later; up/down arrows are
-// enough for the initial slot port.
+// Wires to the v2 tool dispatcher (`crm.pipelines.*`). v1 supports
+// add / remove / reorder / probability edit on the default sales
+// pipeline. Each stage mutation is its own tool call because the
+// CRM dispatches stage CRUD individually (no bulk-update tool), and
+// the previous v1 raw `/api/crm/pipelines` PATCH route doesn't
+// exist in the module surface.
 
 import { useEffect, useMemo, useState } from "react";
+import { tool } from "../lib/api.js";
 
 interface Stage {
   id: string;
@@ -24,14 +27,6 @@ interface Pipeline {
   stages?: Stage[];
 }
 
-const PIPELINE_BASE = "/api/crm/pipelines";
-
-async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, init);
-  if (!res.ok) throw new Error(`${init?.method ?? "GET"} ${input} → HTTP ${res.status}`);
-  return (await res.json()) as T;
-}
-
 export function PipelineSettingsSlot() {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -45,11 +40,19 @@ export function PipelineSettingsSlot() {
     [pipelines, activeId],
   );
 
+  async function refreshStages(pipelineId: string) {
+    const res = await tool<{ data: Pipeline & { stages: Stage[] } }>(
+      "crm.pipelines.get",
+      { id: pipelineId },
+    );
+    setStages([...res.data.stages].sort((a, b) => a.sortOrder - b.sortOrder));
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetchJson<{ data: Pipeline[] }>(PIPELINE_BASE);
+        const res = await tool<{ data: Pipeline[] }>("crm.pipelines.list", {});
         if (cancelled) return;
         setPipelines(res.data);
         const initial = res.data.find((p) => p.isDefault) ?? res.data[0];
@@ -68,11 +71,7 @@ export function PipelineSettingsSlot() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetchJson<{ data: Pipeline & { stages: Stage[] } }>(
-          `${PIPELINE_BASE}/${activeId}`,
-        );
-        if (cancelled) return;
-        setStages([...res.data.stages].sort((a, b) => a.sortOrder - b.sortOrder));
+        await refreshStages(activeId);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -82,17 +81,22 @@ export function PipelineSettingsSlot() {
     };
   }, [activeId]);
 
-  async function persistStages(next: Stage[]) {
+  async function persistReorder(next: Stage[]) {
     if (!activeId) return;
     setBusy(true);
     setError(null);
     try {
-      await fetchJson(`${PIPELINE_BASE}/${activeId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ stages: next }),
-      });
-      setStages(next);
+      // Patch sortOrder + probability stage-by-stage. Stage creates/
+      // deletes are handled by their dedicated callers below.
+      for (const s of next) {
+        await tool("crm.pipelines.update_stage", {
+          pipelineId: activeId,
+          id: s.id,
+          sortOrder: s.sortOrder,
+          probability: s.probability,
+        });
+      }
+      await refreshStages(activeId);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -112,37 +116,64 @@ export function PipelineSettingsSlot() {
     next.forEach((s, i) => {
       s.sortOrder = i;
     });
-    void persistStages(next);
+    void persistReorder(next);
   }
 
-  function updateProbability(stageId: string, value: number) {
-    const next = stages.map((s) => (s.id === stageId ? { ...s, probability: value } : s));
-    void persistStages(next);
+  async function updateProbability(stageId: string, value: number) {
+    if (!activeId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await tool("crm.pipelines.update_stage", {
+        pipelineId: activeId,
+        id: stageId,
+        probability: value,
+      });
+      await refreshStages(activeId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function removeStage(stageId: string) {
-    const next = stages.filter((s) => s.id !== stageId);
-    next.forEach((s, i) => {
-      s.sortOrder = i;
-    });
-    void persistStages(next);
+  async function removeStage(stageId: string) {
+    if (!activeId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await tool("crm.pipelines.delete_stage", {
+        pipelineId: activeId,
+        id: stageId,
+      });
+      await refreshStages(activeId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function addStage() {
+  async function addStage() {
     const name = newStageName.trim();
-    if (!name) return;
-    const next: Stage[] = [
-      ...stages,
-      {
-        id: `tmp-${crypto.randomUUID()}`,
+    if (!name || !activeId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await tool("crm.pipelines.create_stage", {
+        pipelineId: activeId,
         name,
         sortOrder: stages.length,
         probability: 25,
         type: "open",
-      },
-    ];
-    setNewStageName("");
-    void persistStages(next);
+      });
+      setNewStageName("");
+      await refreshStages(activeId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
