@@ -32,6 +32,8 @@ import {
   markWon,
   markLost,
 } from "./slots/dealActions.js";
+import { DealsClosingThisWeekWidget } from "./dashboard/DealsClosingThisWeek.js";
+import { PipelineByStageWidget } from "./dashboard/PipelineByStage.js";
 
 export const crmUI: PluginUI = {
   moduleId: "crm",
@@ -65,6 +67,24 @@ export const crmUI: PluginUI = {
   settingsPanels: [
     { id: "crm.pipeline", label: "Pipeline configuration", element: PipelineSettingsSlot },
     { id: "crm.maintenance", label: "Maintenance", element: MaintenanceSettingsSlot },
+  ],
+  dashboardWidgets: [
+    {
+      id: "pipeline-by-stage",
+      title: "Pipeline by stage",
+      size: "medium",
+      slot: "secondary",
+      element: PipelineByStageWidget,
+      order: 100,
+    },
+    {
+      id: "deals-closing-this-week",
+      title: "Closing this week",
+      size: "medium",
+      slot: "secondary",
+      element: DealsClosingThisWeekWidget,
+      order: 110,
+    },
   ],
 };
 
