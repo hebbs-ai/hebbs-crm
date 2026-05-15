@@ -59,11 +59,13 @@ function formatFieldLabel(key: string): string {
     .trim();
 }
 
-function formatCurrency(value: number, currency: string): string {
+function formatCurrency(cents: number, currency: string): string {
+  // Deal values are stored as integer cents — match Pipeline/DealDetail.
+  const usd = cents / 100;
   try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+    return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(usd);
   } catch {
-    return `${currency} ${value.toLocaleString()}`;
+    return `${currency} ${usd.toLocaleString()}`;
   }
 }
 
