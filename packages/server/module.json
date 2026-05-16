@@ -1,7 +1,7 @@
 {
   "id": "crm",
   "name": "CRM",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Sales CRM — contacts, companies, deals, pipelines, activities. Ships specialised agents for triage, enrichment, deal analysis, follow-up writing, and meeting prep.",
   "kind": "module",
   "entry": "./index.mjs",

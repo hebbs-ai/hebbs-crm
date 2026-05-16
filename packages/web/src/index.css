@@ -1,35 +1,51 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "@boringos/ui/theme.css";
 @import "tailwindcss";
 
-/* BoringOS CRM — Notion-inspired design tokens */
+/*
+ * BoringOS CRM design tokens.
+ *
+ * Structural tokens (bg, surface, text, border, accent) alias to the
+ * cross-bundle `--bos-*` contract from `@boringos/ui/theme.css`. The shell
+ * flips `data-theme="dark"` on <html> and our colors follow automatically —
+ * no CRM rebuild needed when the shell ships new themes.
+ *
+ * CRM-specific colored chips (the blue/green/yellow/red/purple/orange
+ * surface + text pairs) get their own `[data-theme="dark"]` block below
+ * so the badges stay legible on the dark canvas.
+ */
 @theme {
-  --color-bg: #ffffff;
-  --color-bg-secondary: #f7f7f5;
-  --color-bg-hover: #f1f1ef;
-  --color-bg-active: #e8e8e5;
+  /* Structural — flow through the shell theme. */
+  --color-bg:             var(--bos-bg);
+  --color-bg-secondary:   var(--bos-bg-warm);
+  --color-bg-hover:       var(--bos-surface-tint);
+  --color-bg-active:      var(--bos-border-subtle);
 
-  --color-accent: #2e68d2;
-  --color-accent-hover: #2558b5;
+  --color-accent:         var(--bos-accent);
+  --color-accent-hover:   var(--bos-accent-light);
 
-  --color-surface-blue: #e8f0fe;
-  --color-surface-green: #e6f4ea;
+  --color-text-primary:   var(--bos-text);
+  --color-text-secondary: var(--bos-muted-strong);
+  --color-text-tertiary:  var(--bos-muted);
+
+  --color-border:         var(--bos-border);
+  --color-border-dark:    var(--bos-border-subtle);
+
+  /* CRM-specific colored chip palette — light values default; dark
+   * overrides live in the [data-theme="dark"] block below. */
+  --color-surface-blue:   #e8f0fe;
+  --color-surface-green:  #e6f4ea;
   --color-surface-yellow: #fef7e0;
-  --color-surface-red: #fce8e6;
+  --color-surface-red:    #fce8e6;
   --color-surface-purple: #f3e8fd;
   --color-surface-orange: #fef0e1;
 
-  --color-text-primary: #37352f;
-  --color-text-secondary: #787774;
-  --color-text-tertiary: #b4b4b0;
-  --color-text-blue: #2e68d2;
-  --color-text-green: #2e7d32;
-  --color-text-yellow: #9a6700;
-  --color-text-red: #c62828;
-  --color-text-purple: #6b2fa0;
-  --color-text-orange: #bf5a0e;
-
-  --color-border: #e9e9e7;
-  --color-border-dark: #d3d3d0;
+  --color-text-blue:      #2e68d2;
+  --color-text-green:     #2e7d32;
+  --color-text-yellow:    #9a6700;
+  --color-text-red:       #c62828;
+  --color-text-purple:    #6b2fa0;
+  --color-text-orange:    #bf5a0e;
 
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.04);
@@ -39,6 +55,27 @@
 
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: "SF Mono", "Fira Code", monospace;
+}
+
+/* Dark-mode overrides for CRM-specific chips. The structural tokens
+ * already flow through `--bos-*` so we only redeclare the colored
+ * palette here. Values mirror the shell's state-channel pattern:
+ * lighter foreground + low-alpha background so the chips stay
+ * readable without burning a hole in the dark canvas. */
+[data-theme="dark"] {
+  --color-surface-blue:   rgba(103, 232, 249, 0.12);
+  --color-surface-green:  rgba(134, 239, 172, 0.12);
+  --color-surface-yellow: rgba(252, 211, 77, 0.14);
+  --color-surface-red:    rgba(252, 165, 165, 0.14);
+  --color-surface-purple: rgba(216, 180, 254, 0.14);
+  --color-surface-orange: rgba(253, 186, 116, 0.14);
+
+  --color-text-blue:      #67E8F9;
+  --color-text-green:     #86EFAC;
+  --color-text-yellow:    #FCD34D;
+  --color-text-red:       #FCA5A5;
+  --color-text-purple:    #D8B4FE;
+  --color-text-orange:    #FDBA74;
 }
 
 body {
