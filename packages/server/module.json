@@ -15,6 +15,6 @@
   ],
   "provides": ["crm-source", "crm-actions"],
   "publisher": { "id": "hebbs", "name": "Hebbs" },
-  "license": "BUSL-1.1",
+  "license": "GPL-3.0-or-later",
   "minFrameworkVersion": "0.1.0"
 }

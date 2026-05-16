@@ -2,6 +2,7 @@
   "name": "boringos-crm",
   "private": true,
   "type": "module",
+  "license": "GPL-3.0-or-later",
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",

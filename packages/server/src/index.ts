@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // @boringos-crm/server — public surface for the v2 CRM module.
 //

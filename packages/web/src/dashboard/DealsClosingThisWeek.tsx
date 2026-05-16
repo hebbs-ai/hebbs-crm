@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // "Deals closing this week" — first CRM contribution to the shell
 // Home dashboard (task_26). Lists open deals with expectedCloseDate

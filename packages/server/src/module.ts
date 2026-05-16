@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // `crm` Module — v2 entry point. Exports `createCrmModule`, a
 // ModuleFactory the host registers via `app.module(createCrmModule)`.

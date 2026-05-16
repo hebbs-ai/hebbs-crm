@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // L6 — Contact detail entity panel. DossierView renders inside
 // ContactDetailPage as it does today; the shell mounts this as the

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // L4 — Pipeline page as a `slots.pages` contribution.
 //

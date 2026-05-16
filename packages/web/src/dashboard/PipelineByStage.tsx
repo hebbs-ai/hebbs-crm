@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // "Pipeline by stage" — second CRM contribution to the shell Home
 // dashboard (task_26). Shows the open-stage breakdown of the

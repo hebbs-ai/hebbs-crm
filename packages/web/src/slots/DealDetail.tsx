@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // L5 — Deal detail entity panel. The shell's entity detail surface
 // for `crm_deal` mounts this component as the primary tab. Existing

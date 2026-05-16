@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 // EntityAction slot contributions for `crm_deal`. Mounted into the
 // shell's per-entity action menu via `crmUI.entityActions` in ui.ts.
