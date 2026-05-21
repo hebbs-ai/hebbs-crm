@@ -137,6 +137,14 @@ export function createCompanyTools(deps: CrmDeps): Tool[] {
           })
           .onConflictDoNothing({
             target: [companies.tenantId, companies.domain],
+            // The arbiter index `crm__companies_tenant_domain_uniq` is
+            // PARTIAL (`... WHERE domain IS NOT NULL`). Postgres only
+            // accepts a partial unique index as an ON CONFLICT arbiter
+            // when the clause restates that predicate — without this the
+            // insert throws "there is no unique or exclusion constraint
+            // matching the ON CONFLICT specification" and every create
+            // that carries a domain fails.
+            where: sql`${companies.domain} IS NOT NULL`,
           })
           .returning();
         if (inserted[0]) {
