@@ -15,8 +15,17 @@ import type { EmailHeaders } from "@boringos/connector-google";
 import { getGmailClient } from "../google-client.js";
 import { logActivity } from "../activity-logger.js";
 import { resolveInboxItemEntities } from "../inbox-resolve.js";
-import { resolveOrDeferLead } from "../lead-ingestion.js";
+import { resolveOrDeferLead, type ResolveResult } from "../lead-ingestion.js";
 import { emitCrm, type CrmDeps } from "./deps.js";
+
+// Gmail-originated inbox items. The framework forward-sync ticker tags
+// items `google.gmail`; the CRM's own (manual) sync historically used
+// `gmail`. Accept both so every Gmail item is actionable regardless of
+// which path ingested it.
+const GMAIL_SOURCES = ["gmail", "google.gmail"];
+function isGmailSource(source: string): boolean {
+  return GMAIL_SOURCES.includes(source);
+}
 
 export function createInboxTools(deps: CrmDeps): Tool[] {
   const list: Tool = {
@@ -112,7 +121,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
           error: { code: "not_found", message: "Item not found", retryable: false },
         };
       }
-      if (item.source !== "gmail") {
+      if (!isGmailSource(item.source)) {
         return {
           ok: false,
           error: {
@@ -250,7 +259,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
           error: { code: "not_found", message: "Item not found", retryable: false },
         };
       }
-      if (item.source !== "gmail") {
+      if (!isGmailSource(item.source)) {
         return {
           ok: false,
           error: {
@@ -363,7 +372,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
           error: { code: "not_found", message: "Item not found", retryable: false },
         };
       }
-      if (item.source !== "gmail") {
+      if (!isGmailSource(item.source)) {
         return {
           ok: false,
           error: {
@@ -470,7 +479,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
       for (const msg of messages) {
         const existing = (await db.execute(sql`
           SELECT id FROM inbox_items
-          WHERE tenant_id = ${ctx.tenantId} AND source = 'gmail' AND source_id = ${msg.id}
+          WHERE tenant_id = ${ctx.tenantId} AND source IN ('gmail', 'google.gmail') AND source_id = ${msg.id}
           LIMIT 1
         `)) as unknown as Array<{ id: string }>;
         if (existing.length > 0) continue;
@@ -505,7 +514,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         const itemId = crypto.randomUUID();
         await db.execute(sql`
           INSERT INTO inbox_items (id, tenant_id, source, source_id, subject, body, "from", status, metadata, created_at, updated_at)
-          VALUES (${itemId}, ${ctx.tenantId}, 'gmail', ${msg.id},
+          VALUES (${itemId}, ${ctx.tenantId}, 'google.gmail', ${msg.id},
             ${msg.subject ?? "No subject"}, ${msg.body}, ${msg.from},
             'unread', ${JSON.stringify(initialMeta)}::jsonb,
             now(), now())
@@ -601,7 +610,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
       for (const itemId of itemIds) {
         emitCrm(deps, "inbox.item_created", ctx.tenantId, {
           itemId,
-          source: "gmail",
+          source: "google.gmail",
         });
       }
 
@@ -649,7 +658,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
       const items = (await db.execute(sql`
         SELECT id, source_id, metadata FROM inbox_items
         WHERE tenant_id = ${ctx.tenantId}
-          AND source = 'gmail'
+          AND source IN ('gmail', 'google.gmail')
           AND source_id IS NOT NULL
           AND (metadata->>'threadMessages') IS NULL
         ORDER BY created_at DESC
@@ -754,7 +763,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
       const needsAttention = (await db.execute(sql`
         SELECT id, source_id FROM inbox_items
         WHERE tenant_id = ${ctx.tenantId}
-          AND source = 'gmail'
+          AND source IN ('gmail', 'google.gmail')
           AND status IN ('unread', 'read')
           AND source_id IS NOT NULL
           AND ((metadata->'agentAnalysis'->>'score')::int >= 50
@@ -764,7 +773,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
       const topArchived = (await db.execute(sql`
         SELECT id, source_id FROM inbox_items
         WHERE tenant_id = ${ctx.tenantId}
-          AND source = 'gmail'
+          AND source IN ('gmail', 'google.gmail')
           AND status = 'archived'
           AND source_id IS NOT NULL
         ORDER BY created_at DESC
@@ -812,6 +821,60 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
 
   // Lightweight one-off ingest path: lets the shell / webhooks / tests
   // hand a synthetic email straight into the CRM without going through
+  // Shared CRM enrichment for an already-inserted inbox item: resolve or
+  // defer the lead, log the inbound "Received:" activity for known
+  // contacts, and stamp metadata.crmLens. Used by inbox.enrich (event-
+  // driven, framework-ingested items) and inbox.ingest.
+  const enrichItem = async (
+    tenantId: string,
+    item: {
+      itemId: string;
+      from: string | null;
+      subject?: string | null;
+      body?: string | null;
+    },
+  ): Promise<ResolveResult> => {
+    const linked = await resolveOrDeferLead(deps, tenantId, item.from);
+    if (linked.matched && linked.contactId) {
+      await logActivity({
+        db: deps.db,
+        tenantId,
+        type: "email",
+        subject: `Received: ${item.subject ?? "(no subject)"}`,
+        body: item.body ?? undefined,
+        contactId: linked.contactId,
+        dealId: linked.dealId,
+        companyId: linked.companyId,
+      });
+      await deps.db.execute(sql`
+        UPDATE inbox_items
+        SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
+          crmLens: {
+            contactMatch: { id: linked.contactId },
+            dealContext: linked.dealId ? { id: linked.dealId } : null,
+            companyMatch: linked.companyId ? { id: linked.companyId } : null,
+            autoCreated: false,
+          },
+        })}::jsonb
+        WHERE id = ${item.itemId} AND tenant_id = ${tenantId}
+      `);
+    } else if (linked.deferred) {
+      await deps.db.execute(sql`
+        UPDATE inbox_items
+        SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
+          crmLens: {
+            pendingLead: {
+              email: linked.email ?? null,
+              displayName: linked.displayName ?? null,
+            },
+          },
+        })}::jsonb
+        WHERE id = ${item.itemId} AND tenant_id = ${tenantId}
+      `);
+    }
+    return linked;
+  };
+
   // Gmail. Mirrors the per-message logic in `inbox.sync` (dedupe on
   // source/source_id, auto-create lead, log inbound activity, emit the
   // event so triage / lens agents wake).
@@ -863,44 +926,12 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
           'unread', '{}'::jsonb, now(), now())
       `);
 
-      const linked = await resolveOrDeferLead(deps, ctx.tenantId, input.from);
-      if (linked.matched && linked.contactId) {
-        await logActivity({
-          db,
-          tenantId: ctx.tenantId,
-          type: "email",
-          subject: `Received: ${input.subject ?? "(no subject)"}`,
-          body: input.body ?? undefined,
-          contactId: linked.contactId,
-          dealId: linked.dealId,
-          companyId: linked.companyId,
-        });
-        await db.execute(sql`
-          UPDATE inbox_items
-          SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
-            crmLens: {
-              contactMatch: { id: linked.contactId },
-              dealContext: linked.dealId ? { id: linked.dealId } : null,
-              companyMatch: linked.companyId ? { id: linked.companyId } : null,
-              autoCreated: false,
-            },
-          })}::jsonb
-          WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
-        `);
-      } else if (linked.deferred) {
-        await db.execute(sql`
-          UPDATE inbox_items
-          SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
-            crmLens: {
-              pendingLead: {
-                email: linked.email ?? null,
-                displayName: linked.displayName ?? null,
-              },
-            },
-          })}::jsonb
-          WHERE id = ${itemId} AND tenant_id = ${ctx.tenantId}
-        `);
-      }
+      const linked = await enrichItem(ctx.tenantId, {
+        itemId,
+        from: input.from,
+        subject: input.subject,
+        body: input.body,
+      });
 
       emitCrm(deps, "inbox.item_created", ctx.tenantId, {
         itemId,
@@ -925,7 +956,78 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
     },
   };
 
-  return [list, getThread, reply, archive, sync, backfillThreads, backfillBodies, ingest];
+  // Event-driven CRM enrichment for an inbox item the framework already
+  // inserted (e.g. via the forward-sync ticker). Seeded as a workflow
+  // triggered by `inbox.item_created`, so framework-ingested Gmail items
+  // get the same lead-resolution + activity-logging `inbox.sync` ran
+  // inline. Idempotent; skips items the triage prefilter marked noise.
+  const enrich: Tool = {
+    name: "inbox.enrich",
+    description:
+      "Run CRM lead-resolution + activity-logging + crmLens stamping on an already-inserted inbox item (by id). Wired to the framework's inbox.item_created event so framework-ingested Gmail items get the same CRM enrichment inbox.sync did. Idempotent; skips items triaged as noise.",
+    inputs: z.object({ itemId: z.string().min(1) }),
+    async handler(
+      input: { itemId: string },
+      ctx: ToolContext,
+    ): Promise<ToolResult> {
+      const rows = (await deps.db.execute(sql`
+        SELECT "from" AS from_addr, subject, body, metadata
+        FROM inbox_items
+        WHERE id = ${input.itemId} AND tenant_id = ${ctx.tenantId}
+        LIMIT 1
+      `)) as unknown as Array<{
+        from_addr: string | null;
+        subject: string | null;
+        body: string | null;
+        metadata: Record<string, unknown> | null;
+      }>;
+      const item = rows[0];
+      if (!item) {
+        return {
+          ok: false,
+          error: {
+            code: "not_found",
+            message: `Inbox item ${input.itemId} not found`,
+            retryable: false,
+          },
+        };
+      }
+
+      const meta = item.metadata ?? {};
+      const lens = meta.crmLens as
+        | { contactMatch?: unknown; pendingLead?: unknown }
+        | undefined;
+      // Idempotent: another path (or a re-fired event) already enriched.
+      if (lens && (lens.contactMatch !== undefined || lens.pendingLead !== undefined)) {
+        return { ok: true, result: { itemId: input.itemId, alreadyEnriched: true } };
+      }
+      // Skip automated/noise — matches inbox.sync's prefilter behavior.
+      const triage = meta.triage as { label?: string } | undefined;
+      if (triage?.label === "noise") {
+        return { ok: true, result: { itemId: input.itemId, skipped: "noise" } };
+      }
+
+      const linked = await enrichItem(ctx.tenantId, {
+        itemId: input.itemId,
+        from: item.from_addr,
+        subject: item.subject,
+        body: item.body,
+      });
+      return {
+        ok: true,
+        result: {
+          itemId: input.itemId,
+          matched: linked.matched,
+          contactId: linked.contactId,
+          dealId: linked.dealId,
+          deferred: linked.deferred,
+          skipped: linked.skipped,
+        },
+      };
+    },
+  };
+
+  return [list, getThread, reply, archive, sync, backfillThreads, backfillBodies, ingest, enrich];
 }
 
 /** Decode base64url Gmail body data to UTF-8 string. */
