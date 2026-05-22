@@ -440,34 +440,14 @@ async function seedWorkflows(
   db: PostgresJsDatabase,
   tenantId: string,
   agents: SeededAgents,
-): Promise<{ emailWorkflowId: string; calCheckWorkflowId: string }> {
+): Promise<{ calCheckWorkflowId: string }> {
   const emailLensAgentId = agents.emailLensId;
 
-  // Email Sync — collapses the old 4-block (trigger→connector-action
-  // →for-each→create-inbox-item) DAG that used unsupported v2 block
-  // kinds into one tool block calling `crm.inbox.sync`. The tool
-  // already fetches Gmail, dedupes, inserts inbox_items, auto-creates
-  // leads, and emits `inbox.item_created` so triage wakes.
-  const emailWorkflowId = randomUUID();
-  await insertWorkflow(
-    db,
-    tenantId,
-    emailWorkflowId,
-    "Email Sync",
-    [
-      { id: "trigger", name: "trigger", kind: "trigger", type: "trigger", config: {} },
-      {
-        id: "sync",
-        name: "sync",
-        kind: "tool",
-        type: "tool",
-        tool: "crm.inbox.sync",
-        inputs: { maxResults: 20 },
-        config: {},
-      },
-    ],
-    [{ id: "e1", sourceBlockId: "trigger", targetBlockId: "sync", sourceHandle: null, sortOrder: 0 }],
-  );
+  // Gmail ingestion is owned by the framework forward-sync ticker now;
+  // the CRM reacts to its `inbox.item_created` event via the "Enrich
+  // inbox items on ingestion" workflow (below) instead of running its
+  // own poller. No CRM-side Email Sync workflow/routine. `crm.inbox.sync`
+  // survives only as a manual "sync now" tool. See hebbs-ai/hebbs-crm#10.
 
   // Calendar Check — same collapse pattern. `crm.calendar.sync_prep`
   // lists upcoming events and seeds one task per event with the
@@ -515,6 +495,31 @@ async function seedWorkflows(
       },
     ],
     [{ id: "e1", sourceBlockId: "trigger", targetBlockId: "wake", sourceHandle: null, sortOrder: 0 }],
+  );
+
+  // Enrich inbox items on ingestion — wakes on the framework's
+  // `inbox.item_created` event (emitted by the forward-sync ticker and
+  // any other ingestion path) and runs CRM lead-resolution + activity
+  // logging via crm.inbox.enrich. This is how framework-ingested Gmail
+  // items get CRM enrichment without the CRM running its own poller.
+  await insertWorkflow(
+    db,
+    tenantId,
+    randomUUID(),
+    "Enrich inbox items on ingestion",
+    [
+      { id: "trigger", name: "trigger", kind: "trigger", type: "trigger", config: { eventType: "inbox.item_created" } },
+      {
+        id: "enrich",
+        name: "enrich",
+        kind: "tool",
+        type: "tool",
+        tool: "crm.inbox.enrich",
+        inputs: { itemId: "{{trigger.itemId}}" },
+        config: {},
+      },
+    ],
+    [{ id: "e1", sourceBlockId: "trigger", targetBlockId: "enrich", sourceHandle: null, sortOrder: 0 }],
   );
 
   // Activate sync routines on Google connect — rewritten to use the
@@ -701,7 +706,7 @@ async function seedWorkflows(
     [{ id: "e1", sourceBlockId: "trigger", targetBlockId: "promote", sourceHandle: null, sortOrder: 0 }],
   );
 
-  return { emailWorkflowId, calCheckWorkflowId };
+  return { calCheckWorkflowId };
 }
 
 function entityCreatedBlocks(
@@ -781,7 +786,6 @@ async function seedRoutines(
     return (r as unknown as Array<{ id: string }>)[0]?.id ?? null;
   };
 
-  const emailWorkflowId = await lookup("Email Sync");
   const calWorkflowId = await lookup("Calendar Check");
 
   // Both sync routines start ACTIVE in v0.3 — the underlying tools
@@ -790,13 +794,6 @@ async function seedRoutines(
   // the connector-gated activation dance. The "Activate sync
   // routines on Google connect" workflow still exists for legacy
   // installs that have paused routines.
-  if (emailWorkflowId) {
-    await db.execute(sql`
-      INSERT INTO routines (id, tenant_id, title, workflow_id, cron_expression, status, created_at, updated_at)
-      VALUES (${randomUUID()}, ${tenantId}, 'Email Sync (every 15 min)', ${emailWorkflowId},
-        '*/15 * * * *', 'active', now(), now())
-    `);
-  }
 
   if (calWorkflowId) {
     await db.execute(sql`
