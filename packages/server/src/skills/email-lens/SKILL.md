@@ -27,7 +27,7 @@ When an inbox item arrives from a sender who isn't in CRM yet, `crm.inbox.sync` 
 
 ## When you wake
 
-You wake on the `triage.classified` event (one per inbox item). The event payload includes `{ itemId, source }`. Fetch the item and read its existing `metadata.triage` block:
+You wake on a task created by the "CRM lens on classified inbox items" workflow — one per actionable inbox item (the workflow only fires the lens for `urgent`/`important` items). Your task description contains an `inbox-item-id: <uuid>` line — parse the itemId from it. Fetch the item and read its existing `metadata.triage` block:
 
 ```
 curl -X POST "$BORINGOS_CALLBACK_URL/api/tools/framework.inbox.read" \
@@ -78,7 +78,7 @@ For each item with a `metadata.triage` classification:
      -d '{"contactId": "<contactId>", "limit": 10}'
    ```
 
-5. **Draft a CRM-aware reply** when generic-triage's score >= 50 AND the classification is `lead` or `reply`. Reference the deal stage by name (e.g. "now that you've moved to negotiation…"). Match the casual sales tone the rest of the CRM uses.
+5. **Draft a CRM-aware reply** when `metadata.triage.label` is `urgent` or `important` (the actionable buy-intent / response-needed labels — you're only woken for these). Skip drafting for `fyi`/`noise`. Reference the deal stage by name (e.g. "now that you've moved to negotiation…"). Match the casual sales tone the rest of the CRM uses.
 
 6. **Update the inbox item** with the lens output via `framework.inbox.update`. The tool merges the supplied `metadata` block — pass only the `crmLens` key. Always preserve the existing `contactMatch` / `dealContext` ids if they were auto-stamped:
    ```
@@ -99,7 +99,7 @@ For each item with a `metadata.triage` classification:
    ```
    Use `null` for `contactMatch` / `dealContext` / `draftResponse` when they don't apply. Always set `processedAt` so the early-exit guard fires next time.
 
-7. **Emit user-facing Actions** (REQUIRED for score >= 50). These become rows in the user's review queue (`tasks` with `origin_kind` of `agent_action` / `human_todo` / `agent_blocked`):
+7. **Emit user-facing Actions** (REQUIRED for `urgent`/`important` items). These become rows in the user's review queue (`tasks` with `origin_kind` of `agent_action` / `human_todo` / `agent_blocked`):
 
    - `originKind: "agent_action"` with `proposedParams.kind = "reply"` when you drafted a reply.
    - `originKind: "agent_action"` with `proposedParams.kind = "schedule_meeting"` when the email asks for time.
@@ -130,7 +130,7 @@ For each item with a `metadata.triage` classification:
 
 ## What you DON'T do
 
-- **Re-classify.** generic-triage owns classification + score. Read its output, don't second-guess it.
+- **Re-classify.** generic-triage owns the classification (`label` ∈ urgent/important/fyi/noise). Read its output, don't second-guess it.
 - **Auto-archive.** Out of scope.
 - **Create contacts or deals.** `crm.inbox.sync` already auto-creates leads from inbound senders. If `metadata.crmLens.contactMatch` is null after sync, the sender was a bot or unparseable — surface that via an `agent_blocked` task and stop.
 - **Process items without `metadata.triage`.** That's a generic-triage gap; surface it via a system task instead (`framework.tasks.create` with `originKind: "agent_blocked"`).
@@ -143,12 +143,12 @@ For each item with a `metadata.triage` classification:
 hebbs recall "interactions with <email>" --entity-id contact-<UUID> --top-k 5 --format json
 ```
 
-**After drafting an important reply (score >= 70):** remember the key insight:
+**After drafting a reply for an `urgent` item (or a notable deal insight):** remember the key insight:
 ```
 hebbs remember "<one-line insight tied to this deal>" --entity-id contact-<UUID> --importance 0.7 --format json
 ```
 
-Don't remember low-score emails or routine replies.
+Don't remember `fyi`/`noise` items or routine replies.
 
 ## Tool response shape
 
@@ -159,4 +159,4 @@ Every tool returns `{ "ok": true, "result": ... }` on success or `{ "ok": false,
 - Process all unprocessed items in your task description (each task references one or many inbox item ids).
 - Be fast — quick lookups, no deep research.
 - Always update `metadata.crmLens`, even when there's no contact match (`contactMatch: null`) so the UI can stop spinning.
-- A score >= 50 item without an emitted Action is incomplete output for this role.
+- An `urgent`/`important` item without an emitted Action is incomplete output for this role.

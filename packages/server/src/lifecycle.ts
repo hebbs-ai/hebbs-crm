@@ -474,9 +474,13 @@ async function seedWorkflows(
     [{ id: "e1", sourceBlockId: "trigger", targetBlockId: "sync", sourceHandle: null, sortOrder: 0 }],
   );
 
-  // CRM Email Lens — wakes on triage.classified. v2 block model:
-  // a `tool` block calling framework.agents.wake with the seeded
-  // agent id baked in.
+  // CRM Email Lens — wakes on triage.classified, but only for
+  // actionable labels (urgent/important), so we don't spawn the lens
+  // agent on fyi/noise. Wakes via framework.tasks.create (assignee =
+  // email-lens) rather than bare framework.agents.wake: the framework
+  // requires every agent run to be bound to a task, and tasks.create
+  // auto-wakes the assignee. The lens reads the itemId from the task
+  // description (`inbox-item-id:` line), same convention as triage.
   await insertWorkflow(
     db,
     tenantId,
@@ -485,16 +489,33 @@ async function seedWorkflows(
     [
       { id: "trigger", name: "trigger", kind: "trigger", type: "trigger", config: { eventType: "triage.classified" } },
       {
-        id: "wake",
-        name: "wake",
+        id: "guard-label",
+        name: "guard-label",
+        kind: "condition",
+        type: "condition",
+        config: { field: "{{trigger.label}}", operator: "in", value: ["urgent", "important"] },
+      },
+      {
+        id: "lens",
+        name: "lens",
         kind: "tool",
         type: "tool",
-        tool: "framework.agents.wake",
-        inputs: { agentId: emailLensAgentId, reason: "triage_classified" },
+        tool: "framework.tasks.create",
+        inputs: {
+          title: "CRM lens: inbox item {{trigger.itemId}}",
+          description:
+            "inbox-item-id: {{trigger.itemId}}\ntriage-label: {{trigger.label}}\nrationale: {{trigger.rationale}}",
+          originKind: "triage.classified",
+          originId: "{{trigger.itemId}}",
+          assigneeAgentId: emailLensAgentId,
+        },
         config: {},
       },
     ],
-    [{ id: "e1", sourceBlockId: "trigger", targetBlockId: "wake", sourceHandle: null, sortOrder: 0 }],
+    [
+      { id: "e1", sourceBlockId: "trigger", targetBlockId: "guard-label", sourceHandle: null, sortOrder: 0 },
+      { id: "e2", sourceBlockId: "guard-label", targetBlockId: "lens", sourceHandle: "true", sortOrder: 0 },
+    ],
   );
 
   // Enrich inbox items on ingestion — wakes on the framework's
