@@ -491,7 +491,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         // it under "noise") and stamp triage so downstream agents
         // skip it.
         const autoClass = msg.headers
-          ? classifyAutomatedMail({ headers: msg.headers, from: msg.from })
+          ? classifyAutomatedMail({ headers: msg.headers, from: msg.from, gmailLabels: msg.labelIds ?? [] })
           : { automated: false, kind: null, reasons: [] as string[] };
 
         const initialMeta: Record<string, unknown> = {
