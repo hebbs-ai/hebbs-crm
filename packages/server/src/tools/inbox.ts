@@ -470,6 +470,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         snippet: string | null;
         date: string | null;
         headers?: EmailHeaders;
+        labelIds?: string[];
       }>;
 
       let newCount = 0;
@@ -496,6 +497,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         const initialMeta: Record<string, unknown> = {
           threadId: msg.threadId,
           bodyHtml: msg.bodyHtml,
+          email: { gmailLabels: msg.labelIds ?? [] },
         };
         if (autoClass.automated) {
           initialMeta.triage = {
