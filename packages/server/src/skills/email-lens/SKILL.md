@@ -78,7 +78,7 @@ For each item with a `metadata.triage` classification:
      -d '{"contactId": "<contactId>", "limit": 10}'
    ```
 
-5. **Draft a CRM-aware reply** when `metadata.triage.label` is `urgent` or `important` (the actionable buy-intent / response-needed labels — you're only woken for these). Skip drafting for `fyi`/`noise`. Reference the deal stage by name (e.g. "now that you've moved to negotiation…"). Match the casual sales tone the rest of the CRM uses.
+5. **Qualify, then draft.** First use judgment to confirm the sender is a *genuine human prospect* — not a transactional / vendor / billing / marketing / automated sender. Weigh the email content **and** `metadata.email.gmailLabels`: `CATEGORY_UPDATES` / `CATEGORY_PROMOTIONS` / `CATEGORY_SOCIAL` / `SPAM` ⇒ almost never a prospect; `IMPORTANT` / `STARRED` ⇒ likely real. If it's clearly **not** a real prospect, **skip**: stamp `crmLens.processedAt`, emit no reply Action, mark the task done (and if a lead was wrongly auto-created for this sender, call `crm.leads.delete_noise`). Otherwise **draft a CRM-aware reply** (you're only woken for `urgent`/`important`). Reference the deal stage by name (e.g. "now that you've moved to negotiation…"). Match the casual sales tone the rest of the CRM uses.
 
 6. **Update the inbox item** with the lens output via `framework.inbox.update`. The tool merges the supplied `metadata` block — pass only the `crmLens` key. Always preserve the existing `contactMatch` / `dealContext` ids if they were auto-stamped:
    ```

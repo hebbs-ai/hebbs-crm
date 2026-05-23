@@ -115,6 +115,29 @@ function isBotLocalPart(local: string): boolean {
   return NOREPLY_LOCAL_PARTS.some((p) => lower.includes(p));
 }
 
+// Transactional / role accounts that are almost never a sales prospect
+// (e.g. payments-update@, billing@, invoices@). Belt-and-suspenders for
+// transactional senders that arrive WITHOUT a Gmail CATEGORY_UPDATES
+// label (which the triage prefilter would otherwise catch). Kept
+// conservative — excludes ambiguous role accounts like support@/info@/
+// sales@ that can be a real human reaching out.
+const ROLE_ACCOUNT_LOCAL_PARTS = [
+  "payments",
+  "payment",
+  "billing",
+  "invoice",
+  "invoices",
+  "receipt",
+  "receipts",
+  "statement",
+  "statements",
+  "alerts",
+];
+function isRoleAccountLocalPart(local: string): boolean {
+  const lower = local.toLowerCase();
+  return ROLE_ACCOUNT_LOCAL_PARTS.some((p) => lower.includes(p));
+}
+
 const STALE_DEAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
@@ -239,6 +262,18 @@ export async function resolveOrDeferLead(
       deferred: false,
       skipped: true,
       skipReason: "bot_sender",
+      email,
+    };
+  }
+  if (isRoleAccountLocalPart(local)) {
+    return {
+      contactId: null,
+      dealId: null,
+      companyId: null,
+      matched: false,
+      deferred: false,
+      skipped: true,
+      skipReason: "role_account",
       email,
     };
   }
