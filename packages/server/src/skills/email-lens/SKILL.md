@@ -103,6 +103,7 @@ For each item with a `metadata.triage` classification:
 
    - `originKind: "agent_action"` with `proposedParams.kind = "reply"` when you drafted a reply.
    - `originKind: "agent_action"` with `proposedParams.kind = "schedule_meeting"` when the email asks for time.
+   - `originKind: "agent_action"` with `proposedParams.kind = "create_deal"` (`contactId`, optional `title`, `inboxItemId`) — **optional, and only when you can extract genuine deal context** from the subject + body (a real opportunity: pricing / proposal / pilot / contract / clear buying intent). Do NOT propose it just because a contact exists or for a routine reply. The user approves it to add the contact to the pipeline.
    - `originKind: "human_todo"` for in-person reminders or things only the user can do.
    - `originKind: "agent_blocked"` when you're unsure (sensitive customer escalation, legal).
 

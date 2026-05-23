@@ -10,6 +10,89 @@ import { contacts } from "../schema/contacts.js";
 import { logActivity, describeContactChanges } from "../activity-logger.js";
 import { emitCrm, type CrmDeps } from "./deps.js";
 
+/**
+ * Create a stub deal for a contact in the first open stage of the default
+ * pipeline. Idempotent — returns the existing open deal if one is already
+ * attached. Shared by the `contacts.promote_to_deal` tool, the
+ * deal-on-reply workflow, and the email-lens "add to pipeline" action.
+ */
+export async function promoteContactToDeal(
+  deps: CrmDeps,
+  tenantId: string,
+  input: { contactId: string; source: string; itemId?: string | null; title?: string },
+): Promise<ToolResult> {
+  const rows = await deps.db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.id, input.contactId), eq(contacts.tenantId, tenantId)))
+    .limit(1);
+  const contact = rows[0];
+  if (!contact) {
+    return { ok: false, error: { code: "not_found", message: "Contact not found", retryable: false } };
+  }
+
+  const openRows = (await deps.db.execute(sql`
+    SELECT d.id
+    FROM crm__deals d
+    LEFT JOIN crm__pipeline_stages s ON s.id = d.stage_id
+    WHERE d.tenant_id = ${tenantId}
+      AND d.contact_id = ${input.contactId}
+      AND (s.type IS NULL OR s.type NOT IN ('won', 'lost'))
+    ORDER BY d.updated_at DESC
+    LIMIT 1
+  `)) as unknown as Array<{ id: string }>;
+  if (openRows[0]) {
+    return { ok: true, result: { dealId: openRows[0].id, created: false, reason: "already_has_open_deal" } };
+  }
+
+  const stageRows = (await deps.db.execute(sql`
+    SELECT s.id, s.pipeline_id FROM crm__pipeline_stages s
+    JOIN crm__pipelines p ON p.id = s.pipeline_id
+    WHERE p.tenant_id = ${tenantId} AND p.is_default = true AND s.type = 'open'
+    ORDER BY s.sort_order ASC
+    LIMIT 1
+  `)) as unknown as Array<{ id: string; pipeline_id: string }>;
+  if (!stageRows[0]) {
+    return { ok: false, error: { code: "internal", message: "Default pipeline has no open stages; cannot create a deal.", retryable: false } };
+  }
+
+  const dealId = crypto.randomUUID();
+  const dealTitle =
+    input.title?.trim()
+      || `${contact.firstName} ${contact.lastName ?? ""}`.trim()
+      || contact.email
+      || "Untitled deal";
+  await deps.db.execute(sql`
+    INSERT INTO crm__deals (
+      id, tenant_id, owner_id, title, value, currency,
+      pipeline_id, stage_id, contact_id, company_id, custom_fields, created_at, updated_at
+    ) VALUES (
+      ${dealId}, ${tenantId}, ${tenantId},
+      ${dealTitle}, 0, 'USD',
+      ${stageRows[0].pipeline_id}, ${stageRows[0].id},
+      ${input.contactId}, ${contact.companyId}, '{}'::jsonb, now(), now()
+    )
+  `);
+
+  await logActivity({
+    db: deps.db,
+    tenantId,
+    subject: `Deal created from ${input.source}: ${dealTitle}`,
+    dealId,
+    contactId: input.contactId,
+    companyId: contact.companyId,
+    body: input.itemId ? `Triggered by inbox item ${input.itemId}` : undefined,
+  });
+
+  emitCrm(deps, "entity.created", tenantId, {
+    entityType: "crm_deal",
+    entityId: dealId,
+    source: `promote_to_deal:${input.source}`,
+  });
+
+  return { ok: true, result: { dealId, created: true } };
+}
+
 export function createContactTools(deps: CrmDeps): Tool[] {
   const list: Tool = {
     name: "contacts.list",
@@ -321,94 +404,7 @@ export function createContactTools(deps: CrmDeps): Tool[] {
       },
       ctx: ToolContext,
     ): Promise<ToolResult> {
-      const rows = await deps.db
-        .select()
-        .from(contacts)
-        .where(and(eq(contacts.id, input.contactId), eq(contacts.tenantId, ctx.tenantId)))
-        .limit(1);
-      const contact = rows[0];
-      if (!contact) {
-        return {
-          ok: false,
-          error: { code: "not_found", message: "Contact not found", retryable: false },
-        };
-      }
-
-      // Idempotency: any non-won/non-lost deal short-circuits.
-      const openRows = (await deps.db.execute(sql`
-        SELECT d.id
-        FROM crm__deals d
-        LEFT JOIN crm__pipeline_stages s ON s.id = d.stage_id
-        WHERE d.tenant_id = ${ctx.tenantId}
-          AND d.contact_id = ${input.contactId}
-          AND (s.type IS NULL OR s.type NOT IN ('won', 'lost'))
-        ORDER BY d.updated_at DESC
-        LIMIT 1
-      `)) as unknown as Array<{ id: string }>;
-      if (openRows[0]) {
-        return {
-          ok: true,
-          result: {
-            dealId: openRows[0].id,
-            created: false,
-            reason: "already_has_open_deal",
-          },
-        };
-      }
-
-      const stageRows = (await deps.db.execute(sql`
-        SELECT s.id, s.pipeline_id FROM crm__pipeline_stages s
-        JOIN crm__pipelines p ON p.id = s.pipeline_id
-        WHERE p.tenant_id = ${ctx.tenantId} AND p.is_default = true AND s.type = 'open'
-        ORDER BY s.sort_order ASC
-        LIMIT 1
-      `)) as unknown as Array<{ id: string; pipeline_id: string }>;
-      if (!stageRows[0]) {
-        return {
-          ok: false,
-          error: {
-            code: "internal",
-            message: "Default pipeline has no open stages; cannot create a deal.",
-            retryable: false,
-          },
-        };
-      }
-
-      const dealId = crypto.randomUUID();
-      const dealTitle =
-        input.title?.trim()
-          || `${contact.firstName} ${contact.lastName ?? ""}`.trim()
-          || contact.email
-          || "Untitled deal";
-      await deps.db.execute(sql`
-        INSERT INTO crm__deals (
-          id, tenant_id, owner_id, title, value, currency,
-          pipeline_id, stage_id, contact_id, company_id, custom_fields, created_at, updated_at
-        ) VALUES (
-          ${dealId}, ${ctx.tenantId}, ${ctx.tenantId},
-          ${dealTitle}, 0, 'USD',
-          ${stageRows[0].pipeline_id}, ${stageRows[0].id},
-          ${input.contactId}, ${contact.companyId}, '{}'::jsonb, now(), now()
-        )
-      `);
-
-      await logActivity({
-        db: deps.db,
-        tenantId: ctx.tenantId,
-        subject: `Deal created from ${input.source === "reply_sent" ? "reply" : "manual promotion"}: ${dealTitle}`,
-        dealId,
-        contactId: input.contactId,
-        companyId: contact.companyId,
-        body: input.itemId ? `Triggered by inbox item ${input.itemId}` : undefined,
-      });
-
-      emitCrm(deps, "entity.created", ctx.tenantId, {
-        entityType: "crm_deal",
-        entityId: dealId,
-        source: `promote_to_deal:${input.source}`,
-      });
-
-      return { ok: true, result: { dealId, created: true } };
+      return promoteContactToDeal(deps, ctx.tenantId, input);
     },
   };
 
