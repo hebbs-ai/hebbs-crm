@@ -24,17 +24,22 @@ import type { CrmDeps, CrmEventBus, GetConnectorToken } from "./tools/deps.js";
 const __moduleDir = dirname(fileURLToPath(import.meta.url));
 
 export const createCrmModule: ModuleFactory = (factoryDeps) => {
+  // `db` stays `unknown` in `ModuleFactoryDeps` so the SDK can avoid
+  // a Drizzle dep (T0.4 audit). The cast is the deliberate seam.
   const db = factoryDeps.db as PostgresJsDatabase;
-  const getEventBus = (): CrmEventBus | null =>
-    (factoryDeps.eventBus ?? null) as CrmEventBus | null;
 
-  // Connector-token accessor injected by the framework (#60). Wrap
-  // the host's optional accessor in a null-returning default so tools
+  // MDK T3.5 — `eventBus` is now typed as the SDK's `EventBus` (T3.1c).
+  // CRM's local `CrmEventBus` shim is a structural supertype, so no
+  // cast is required. The shim itself retires in T8.1.
+  const getEventBus = (): CrmEventBus | null =>
+    factoryDeps.eventBus ?? null;
+
+  // `getConnectorToken` is typed by module-sdk (T0.3 / #60) — no cast
+  // needed; the `??` falls back to a null-returning stub so tools
   // degrade gracefully on a host without an AuthManager (e.g. early
   // test harnesses).
-  const getConnectorToken: GetConnectorToken = factoryDeps.getConnectorToken
-    ? (factoryDeps.getConnectorToken as GetConnectorToken)
-    : async () => null;
+  const getConnectorToken: GetConnectorToken =
+    factoryDeps.getConnectorToken ?? (async () => null);
 
   const deps: CrmDeps = { db, getEventBus, getConnectorToken };
 
