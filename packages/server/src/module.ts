@@ -19,7 +19,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { crmMigrations } from "./migrations.js";
 import { createCrmTools } from "./tools/index.js";
 import { createCrmLifecycle } from "./lifecycle.js";
-import type { CrmDeps, CrmEventBus } from "./tools/deps.js";
+import type { CrmDeps, CrmEventBus, GetConnectorToken } from "./tools/deps.js";
 
 const __moduleDir = dirname(fileURLToPath(import.meta.url));
 
@@ -28,7 +28,15 @@ export const createCrmModule: ModuleFactory = (factoryDeps) => {
   const getEventBus = (): CrmEventBus | null =>
     (factoryDeps.eventBus ?? null) as CrmEventBus | null;
 
-  const deps: CrmDeps = { db, getEventBus };
+  // Connector-token accessor injected by the framework (#60). Wrap
+  // the host's optional accessor in a null-returning default so tools
+  // degrade gracefully on a host without an AuthManager (e.g. early
+  // test harnesses).
+  const getConnectorToken: GetConnectorToken = factoryDeps.getConnectorToken
+    ? (factoryDeps.getConnectorToken as GetConnectorToken)
+    : async () => null;
+
+  const deps: CrmDeps = { db, getEventBus, getConnectorToken };
 
   const module: Module = {
     id: "crm",

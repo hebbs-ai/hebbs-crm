@@ -505,7 +505,7 @@ async function executeAction(
         return { ok: false, error: "reply only supported for gmail items" };
       }
 
-      const cli = await getGmailClient(deps.db, tenantId);
+      const cli = await getGmailClient(deps);
       if (!cli.gmail) return { ok: false, error: cli.error };
 
       const toEmail = item.from.match(/<([^>]+)>/)?.[1] ?? item.from;
@@ -579,7 +579,7 @@ async function executeAction(
         return { ok: false, error: "schedule_meeting requires summary, startTime, endTime" };
       }
 
-      const cli = await getCalendarClient(deps.db, tenantId);
+      const cli = await getCalendarClient(deps);
       if (!cli.calendar) return { ok: false, error: cli.error };
 
       const r = await cli.calendar.executeAction("create_event", {
