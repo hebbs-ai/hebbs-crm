@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@boringos-crm/shared": "workspace:*",
-    "@boringos/ui": "^0.1.8",
+    "@boringos/ui": "^0.1.9",
     "@boringos/workflow-ui": "^0.1.8",
     "@dagrejs/dagre": "^3.0.0",
     "@tanstack/react-query": "^5.0.0",
