@@ -15,13 +15,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@boringos/agent": "link:../../../boringos-framework/packages/@boringos/agent",
-    "@boringos/module-sdk": "link:../../../boringos-framework/packages/@boringos/module-sdk",
-    "@boringos/connector-google": "link:../../../boringos-framework/packages/@boringos/connector-google",
-    "@boringos/connector-slack": "link:../../../boringos-framework/packages/@boringos/connector-slack",
-    "@boringos/core": "link:../../../boringos-framework/packages/@boringos/core",
-    "@boringos/db": "link:../../../boringos-framework/packages/@boringos/db",
-    "@boringos/shared": "link:../../../boringos-framework/packages/@boringos/shared",
+    "@boringos/agent": "^0.1.9",
+    "@boringos/module-sdk": "^0.3.0",
+    "@boringos/connector-google": "^0.2.0",
+    "@boringos/connector-slack": "^0.2.0",
+    "@boringos/core": "^0.1.9",
+    "@boringos/db": "^0.1.8",
+    "@boringos/shared": "^0.1.8",
     "@boringos-crm/shared": "workspace:*",
     "drizzle-orm": "^0.41.0",
     "hono": "^4.7.0"

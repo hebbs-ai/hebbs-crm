@@ -18,8 +18,8 @@
   },
   "dependencies": {
     "@boringos-crm/shared": "workspace:*",
-    "@boringos/ui": "link:../../../boringos-framework/packages/@boringos/ui",
-    "@boringos/workflow-ui": "link:../../../boringos-framework/packages/@boringos/workflow-ui",
+    "@boringos/ui": "^0.1.8",
+    "@boringos/workflow-ui": "^0.1.8",
     "@dagrejs/dagre": "^3.0.0",
     "@tanstack/react-query": "^5.0.0",
     "@xyflow/react": "^12.10.2",
