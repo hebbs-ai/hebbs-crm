@@ -20,6 +20,7 @@ import {
   resolveContactByEmail,
   resolveInboxItemEntities,
 } from "../inbox-resolve.js";
+import { promoteContactToDeal } from "./contacts.js";
 import { emitCrm, type CrmDeps } from "./deps.js";
 
 const ALLOWED_ACTIVITY_TYPES = new Set(["call", "email", "meeting", "note", "task"]);
@@ -188,7 +189,7 @@ export function createActionTools(deps: CrmDeps): Tool[] {
   const execute: Tool = {
     name: "actions.execute",
     description:
-      "Execute an agent_action by dispatching its proposed_params.kind: 'log_activity' | 'reply' | 'schedule_meeting' | 'resume_workflow'. Optional `params` overrides proposed_params (Edit & Run flow). On success the action is marked done.",
+      "Execute an agent_action by dispatching its proposed_params.kind: 'log_activity' | 'reply' | 'schedule_meeting' | 'create_deal' | 'resume_workflow'. 'create_deal' needs `contactId` (optional `title`, `inboxItemId`) and adds the contact to the pipeline. Optional `params` overrides proposed_params (Edit & Run flow). On success the action is marked done.",
     inputs: z.object({
       id: z.string().uuid(),
       params: z.record(z.unknown()).optional(),
@@ -504,7 +505,7 @@ async function executeAction(
         return { ok: false, error: "reply only supported for gmail items" };
       }
 
-      const cli = await getGmailClient(deps.db, tenantId);
+      const cli = await getGmailClient(deps);
       if (!cli.gmail) return { ok: false, error: cli.error };
 
       const toEmail = item.from.match(/<([^>]+)>/)?.[1] ?? item.from;
@@ -578,7 +579,7 @@ async function executeAction(
         return { ok: false, error: "schedule_meeting requires summary, startTime, endTime" };
       }
 
-      const cli = await getCalendarClient(deps.db, tenantId);
+      const cli = await getCalendarClient(deps);
       if (!cli.calendar) return { ok: false, error: cli.error };
 
       const r = await cli.calendar.executeAction("create_event", {
@@ -628,6 +629,26 @@ async function executeAction(
         error:
           "resume_workflow is no longer supported. Use a comment on an agent_action task instead so the assignee agent wakes via crm.comment.posted.",
       };
+    }
+
+    case "create_deal": {
+      // Optional "add to pipeline" — the email-lens proposes this only
+      // when it extracted genuine deal context. Creates a stub deal in
+      // stage 1 (idempotent: no-op if the contact already has an open deal).
+      const { contactId, title, inboxItemId } = params as {
+        contactId?: string;
+        title?: string;
+        inboxItemId?: string;
+      };
+      if (!contactId) return { ok: false, error: "create_deal requires `contactId`" };
+      const res = await promoteContactToDeal(deps, tenantId, {
+        contactId,
+        source: "agent_action",
+        title,
+        itemId: inboxItemId ?? null,
+      });
+      if (!res.ok) return { ok: false, error: res.error?.message ?? "create_deal failed" };
+      return { ok: true, detail: res.result };
     }
 
     default:

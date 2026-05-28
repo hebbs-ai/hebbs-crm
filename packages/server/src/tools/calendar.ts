@@ -46,7 +46,7 @@ export function createCalendarTools(deps: CrmDeps): Tool[] {
       const maxResults = input.maxResults ?? 10;
       const lookaheadHours = input.lookaheadHours ?? 24;
 
-      const client = await getCalendarClient(db, ctx.tenantId);
+      const client = await getCalendarClient(deps);
       if (!client.calendar) {
         // No Google connector → soft no-op so the cron routine still
         // succeeds. Matches `inbox.sync`'s shape.

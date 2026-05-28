@@ -140,7 +140,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
 
       let threadId = (meta.threadId as string) ?? null;
 
-      const clientResult = await getGmailClient(db, ctx.tenantId);
+      const clientResult = await getGmailClient(deps);
       if (!clientResult.gmail) {
         return {
           ok: false,
@@ -270,7 +270,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         };
       }
 
-      const clientResult = await getGmailClient(db, ctx.tenantId);
+      const clientResult = await getGmailClient(deps);
       if (!clientResult.gmail) {
         return {
           ok: false,
@@ -383,7 +383,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         };
       }
 
-      const clientResult = await getGmailClient(db, ctx.tenantId);
+      const clientResult = await getGmailClient(deps);
       if (!clientResult.gmail) {
         return {
           ok: false,
@@ -435,7 +435,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
       const db = deps.db;
       const maxResults = input.maxResults ?? 20;
 
-      const clientResult = await getGmailClient(db, ctx.tenantId);
+      const clientResult = await getGmailClient(deps);
       if (!clientResult.gmail) {
         return {
           ok: false,
@@ -470,6 +470,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         snippet: string | null;
         date: string | null;
         headers?: EmailHeaders;
+        labelIds?: string[];
       }>;
 
       let newCount = 0;
@@ -490,12 +491,13 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
         // it under "noise") and stamp triage so downstream agents
         // skip it.
         const autoClass = msg.headers
-          ? classifyAutomatedMail({ headers: msg.headers, from: msg.from })
+          ? classifyAutomatedMail({ headers: msg.headers, from: msg.from, gmailLabels: msg.labelIds ?? [] })
           : { automated: false, kind: null, reasons: [] as string[] };
 
         const initialMeta: Record<string, unknown> = {
           threadId: msg.threadId,
           bodyHtml: msg.bodyHtml,
+          email: { gmailLabels: msg.labelIds ?? [] },
         };
         if (autoClass.automated) {
           initialMeta.triage = {
@@ -642,7 +644,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
       const db = deps.db;
       const limit = input.limit ?? 30;
 
-      const clientResult = await getGmailClient(db, ctx.tenantId);
+      const clientResult = await getGmailClient(deps);
       if (!clientResult.gmail) {
         return {
           ok: false,
@@ -747,7 +749,7 @@ export function createInboxTools(deps: CrmDeps): Tool[] {
     async handler(_input: Record<string, never>, ctx: ToolContext): Promise<ToolResult> {
       const db = deps.db;
 
-      const clientResult = await getGmailClient(db, ctx.tenantId);
+      const clientResult = await getGmailClient(deps);
       if (!clientResult.gmail) {
         return {
           ok: false,
