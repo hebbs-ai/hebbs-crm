@@ -79,18 +79,9 @@ export function createCrmLifecycle(
 
       await seedPipeline(db, tenantId);
 
-      const runtimeId = await fetchClaudeRuntimeId(db, tenantId);
-      if (!runtimeId) {
-        console.warn(
-          `[crm.onInstall] No Claude runtime for tenant ${tenantId} — skipping agent + workflow seed. Re-install once a runtime is provisioned.`,
-        );
-        return;
-      }
-
-      // Lifecycle.seed walks the AgentSeed list, looks up the
-      // tenant's root agent + runtime, and writes idempotently
-      // against __seed_meta. The first call inserts; subsequent
-      // calls (or hot-reloads) no-op unless the seed payload bumps.
+      // Runtime is host-wide via BORINGOS_RUNTIME — no per-tenant
+      // runtime lookup needed. Lifecycle.seed inserts agents with
+      // runtime_id = null; engine resolves at wake.
       const agentSeeds = buildCrmAgentSeeds();
       await Lifecycle.seed(ctx, { agents: agentSeeds });
 
@@ -404,19 +395,6 @@ async function seedPipeline(db: PostgresJsDatabase, tenantId: string) {
 // AuthManager + connector_accounts, exposed via
 // `/api/connectors/oauth/slack/authorize`. The env-gated bot-token
 // shortcut never worked in production with v2.
-
-async function fetchClaudeRuntimeId(
-  db: PostgresJsDatabase,
-  tenantId: string,
-): Promise<string | null> {
-  const result = await db.execute(sql`
-    SELECT id FROM runtimes
-    WHERE tenant_id = ${tenantId} AND type = 'claude'
-    LIMIT 1
-  `);
-  const row = (result as unknown as Array<{ id: string }>)[0];
-  return row?.id ?? null;
-}
 
 // Every CRM agent reports to the tenant's existing root agent
 // (typically the copilot). The framework enforces "one root per
