@@ -15,15 +15,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@boringos/agent": "^0.1.17",
-    "@boringos/module-sdk": "^0.10.0",
+    "@boringos/agent": "^0.3.1",
+    "@boringos/module-sdk": "^0.13.0",
     "@boringos/connector-google": "^0.2.8",
     "@boringos/connector-slack": "^0.2.8",
-    "@boringos/core": "^0.2.5",
-    "@boringos/db": "^0.1.9",
+    "@boringos/core": "^0.4.0",
+    "@boringos/db": "^0.2.0",
     "@boringos/shared": "^0.1.8",
     "@boringos-crm/shared": "workspace:*",
-    "drizzle-orm": "^0.41.0",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.7.0"
   },
   "devDependencies": {

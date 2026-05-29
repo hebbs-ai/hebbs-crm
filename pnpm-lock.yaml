@@ -21,29 +21,29 @@ importers:
         specifier: workspace:*
         version: link:../shared
       '@boringos/agent':
-        specifier: ^0.1.17
-        version: 0.1.17(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))(kysely@0.28.17)(pg@8.21.0)
+        specifier: ^0.3.1
+        version: 0.3.1(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))(kysely@0.28.17)(pg@8.21.0)
       '@boringos/connector-google':
         specifier: ^0.2.8
-        version: 0.2.8(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
+        version: 0.2.8(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
       '@boringos/connector-slack':
         specifier: ^0.2.8
-        version: 0.2.8(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
+        version: 0.2.8(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
       '@boringos/core':
-        specifier: ^0.2.5
-        version: 0.2.5(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))(drizzle-orm@0.41.0(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))(kysely@0.28.17)(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3))(zod@4.4.3)
+        specifier: ^0.4.0
+        version: 0.4.0(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))(drizzle-orm@0.45.2(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))(kysely@0.28.17)(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3))(zod@4.4.3)
       '@boringos/db':
-        specifier: ^0.1.9
-        version: 0.1.9(kysely@0.28.17)(pg@8.21.0)
+        specifier: ^0.2.0
+        version: 0.2.0(kysely@0.28.17)(pg@8.21.0)
       '@boringos/module-sdk':
-        specifier: ^0.10.0
-        version: 0.10.0(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
+        specifier: ^0.13.0
+        version: 0.13.0(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
       '@boringos/shared':
         specifier: ^0.1.8
         version: 0.1.8
       drizzle-orm:
-        specifier: ^0.41.0
-        version: 0.41.0(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9)
+        specifier: ^0.45.2
+        version: 0.45.2(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9)
       hono:
         specifier: ^4.7.0
         version: 4.12.23
@@ -286,23 +286,29 @@ packages:
   '@better-fetch/fetch@1.1.21':
     resolution: {integrity: sha512-/ImESw0sskqlVR94jB+5+Pxjf+xBwDZF/N5+y2/q4EqD7IARUTSpPfIo8uf39SYpCxyOCtbyYpUrZ3F/k0zT4A==}
 
-  '@boringos/agent@0.1.17':
-    resolution: {integrity: sha512-SrB4TFtSqEqji7lkcJgEcWmeRXfaCavMFKcLB4PC8ISY/Ma9w9+6+LuFN1AncsOgPDam1XiFQv/q8OfDq4yVTA==}
+  '@boringos/agent@0.3.1':
+    resolution: {integrity: sha512-8gD5ZUtgMPe+1CRgnkrpjvzSnuk+pFRjYPLw56pjP5NVzrwOpwyo03IVhHGIHe77B1dfsz76CAa+Pcavwcgh6A==}
+
+  '@boringos/connector-google@0.2.11':
+    resolution: {integrity: sha512-G2Ay1CsiP9OM3XWmAUp30nyZDr5vSP/2wQVLkurTen4UwR5ElU6rDHPecsx8PYxcPJ5x022EIyybO4BsX4bq1Q==}
 
   '@boringos/connector-google@0.2.8':
     resolution: {integrity: sha512-f6xM7NPexx8OHbm6WbAIXTg1pH958Acmy6a+YJm4PIC5OINJYa9jB767+XKXuK4lC5YftYOrH6d/oIdkkbxbUw==}
 
+  '@boringos/connector-slack@0.2.11':
+    resolution: {integrity: sha512-RcR9MeasL+1oqmZKQNU6zu2ZyTC3uKIgwvhAgPQKhZWTLX0SjaBmP4J9rfBG+qXXf5JjlfzVS+0zLfkNc4EmAg==}
+
   '@boringos/connector-slack@0.2.8':
     resolution: {integrity: sha512-Zn6o3JvSqCgif5nSl+mTBjKRWUkIfwvbL0pAswTav+fUHOfRRbWSP0QD6Xkunpp6DdRzBoRm3RmqRw3UvgSmiA==}
 
-  '@boringos/core@0.2.5':
-    resolution: {integrity: sha512-XR3tXPKs4yxDI5QwXGaF8dosxZxnnq3zn2/GxWhslqTi6eCEecqywh3VKQ+0PY4dYw5Wu3fuxYYHluQy+0lTZw==}
+  '@boringos/core@0.4.0':
+    resolution: {integrity: sha512-9KMt3lWIk6q0NLqJmlIvy/7PFrwYbm8Am7HgH3UDE+2k+JpY1b2M9vC8dU4yYDbsPHfJXD8uKppo4ogVPvU1Hg==}
 
-  '@boringos/db@0.1.9':
-    resolution: {integrity: sha512-HfbsYH9q/Aw/5QE1q20tAa5uqcH+SuHTK6WxymtgCFeKvXkLOMVk8KKRzgQAKJdum7mvsjnnj9U1f/Z+bckLAA==}
+  '@boringos/db@0.2.0':
+    resolution: {integrity: sha512-FPMtM8eL5F/dBiKQ0CG2dkwyH7gNm2L7WIWT6LDxcqF8kPGj8BMKYTjXyfkI4m12ICY5u0yQQTbBa1PBHmHsSg==}
 
-  '@boringos/drive@0.1.9':
-    resolution: {integrity: sha512-Q9FTFJMNtzzNupCMOaIGMs6PG8ipKu7HdzfydP8mRT6Gp/g99/NaYklOpD4DAOuIYRm1cilB19u/fVNJlScPUQ==}
+  '@boringos/drive@0.1.10':
+    resolution: {integrity: sha512-65uTMM317DtRwTK5ggUVt22OPzxZNTEU7rVNVbd6Cj1jQ3L1I72jQASkgeRNUleoRrw+CXMJ3DQdcrimxlVTzQ==}
 
   '@boringos/memory@0.1.9':
     resolution: {integrity: sha512-XB/ncJ4S71gbxaZJM6GebyEQzkFj/gOJDAlSIyL2Huj/YP132hnxnXSZ2aS9x1fsT2ch2/OF5GPKi6lMwnOTAA==}
@@ -312,6 +318,21 @@ packages:
     hasBin: true
     peerDependencies:
       '@boringos/drive': ^0.1.9
+      '@boringos/memory': ^0.1.9
+      '@boringos/ui': ^0.1.9
+    peerDependenciesMeta:
+      '@boringos/drive':
+        optional: true
+      '@boringos/memory':
+        optional: true
+      '@boringos/ui':
+        optional: true
+
+  '@boringos/module-sdk@0.13.0':
+    resolution: {integrity: sha512-K+1KCSkEDY75BTOLTznvKXkm2/wSofcryk5e12Wsu1KXVFHERGGrWZSydap7SbJPKRnkpcqt7/diymqROlPmJQ==}
+    hasBin: true
+    peerDependencies:
+      '@boringos/drive': ^0.1.10
       '@boringos/memory': ^0.1.9
       '@boringos/ui': ^0.1.9
     peerDependenciesMeta:
@@ -1599,6 +1620,98 @@ packages:
       sqlite3:
         optional: true
 
+  drizzle-orm@0.45.2:
+    resolution: {integrity: sha512-kY0BSaTNYWnoDMVoyY8uxmyHjpJW1geOmBMdSSicKo9CIIWkSxMIj2rkeSR51b8KAPB7m+qysjuHme5nKP+E5Q==}
+    peerDependencies:
+      '@aws-sdk/client-rds-data': '>=3'
+      '@cloudflare/workers-types': '>=4'
+      '@electric-sql/pglite': '>=0.2.0'
+      '@libsql/client': '>=0.10.0'
+      '@libsql/client-wasm': '>=0.10.0'
+      '@neondatabase/serverless': '>=0.10.0'
+      '@op-engineering/op-sqlite': '>=2'
+      '@opentelemetry/api': ^1.4.1
+      '@planetscale/database': '>=1.13'
+      '@prisma/client': '*'
+      '@tidbcloud/serverless': '*'
+      '@types/better-sqlite3': '*'
+      '@types/pg': '*'
+      '@types/sql.js': '*'
+      '@upstash/redis': '>=1.34.7'
+      '@vercel/postgres': '>=0.8.0'
+      '@xata.io/client': '*'
+      better-sqlite3: '>=7'
+      bun-types: '*'
+      expo-sqlite: '>=14.0.0'
+      gel: '>=2'
+      knex: '*'
+      kysely: '*'
+      mysql2: '>=2'
+      pg: '>=8'
+      postgres: '>=3'
+      prisma: '*'
+      sql.js: '>=1'
+      sqlite3: '>=5'
+    peerDependenciesMeta:
+      '@aws-sdk/client-rds-data':
+        optional: true
+      '@cloudflare/workers-types':
+        optional: true
+      '@electric-sql/pglite':
+        optional: true
+      '@libsql/client':
+        optional: true
+      '@libsql/client-wasm':
+        optional: true
+      '@neondatabase/serverless':
+        optional: true
+      '@op-engineering/op-sqlite':
+        optional: true
+      '@opentelemetry/api':
+        optional: true
+      '@planetscale/database':
+        optional: true
+      '@prisma/client':
+        optional: true
+      '@tidbcloud/serverless':
+        optional: true
+      '@types/better-sqlite3':
+        optional: true
+      '@types/pg':
+        optional: true
+      '@types/sql.js':
+        optional: true
+      '@upstash/redis':
+        optional: true
+      '@vercel/postgres':
+        optional: true
+      '@xata.io/client':
+        optional: true
+      better-sqlite3:
+        optional: true
+      bun-types:
+        optional: true
+      expo-sqlite:
+        optional: true
+      gel:
+        optional: true
+      knex:
+        optional: true
+      kysely:
+        optional: true
+      mysql2:
+        optional: true
+      pg:
+        optional: true
+      postgres:
+        optional: true
+      prisma:
+        optional: true
+      sql.js:
+        optional: true
+      sqlite3:
+        optional: true
+
   eastasianwidth@0.2.0:
     resolution: {integrity: sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==}
 
@@ -2695,12 +2808,12 @@ snapshots:
       nanostores: 1.3.0
       zod: 4.4.3
 
-  '@better-auth/drizzle-adapter@1.6.11(@better-auth/core@1.6.11(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(drizzle-orm@0.41.0(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))':
+  '@better-auth/drizzle-adapter@1.6.11(@better-auth/core@1.6.11(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(drizzle-orm@0.45.2(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))':
     dependencies:
       '@better-auth/core': 1.6.11(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0)
       '@better-auth/utils': 0.4.0
     optionalDependencies:
-      drizzle-orm: 0.41.0(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9)
+      drizzle-orm: 0.45.2(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9)
 
   '@better-auth/kysely-adapter@1.6.11(@better-auth/core@1.6.11(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(kysely@0.28.17)':
     dependencies:
@@ -2736,12 +2849,12 @@ snapshots:
 
   '@better-fetch/fetch@1.1.21': {}
 
-  '@boringos/agent@0.1.17(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))(kysely@0.28.17)(pg@8.21.0)':
+  '@boringos/agent@0.3.1(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))(kysely@0.28.17)(pg@8.21.0)':
     dependencies:
-      '@boringos/db': 0.1.9(kysely@0.28.17)(pg@8.21.0)
-      '@boringos/drive': 0.1.9(kysely@0.28.17)(pg@8.21.0)
+      '@boringos/db': 0.2.0(kysely@0.28.17)(pg@8.21.0)
+      '@boringos/drive': 0.1.10(kysely@0.28.17)(pg@8.21.0)
       '@boringos/memory': 0.1.9
-      '@boringos/module-sdk': 0.10.0(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
+      '@boringos/module-sdk': 0.13.0(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
       '@boringos/pipeline': 0.1.9
       '@boringos/runtime': 0.1.9
       '@boringos/shared': 0.1.8
@@ -2781,9 +2894,9 @@ snapshots:
       - sqlite3
       - supports-color
 
-  '@boringos/connector-google@0.2.8(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))':
+  '@boringos/connector-google@0.2.11(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))':
     dependencies:
-      '@boringos/module-sdk': 0.10.0(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
+      '@boringos/module-sdk': 0.13.0(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
       '@boringos/shared': 0.1.8
     transitivePeerDependencies:
       - '@boringos/drive'
@@ -2793,9 +2906,9 @@ snapshots:
       - bare-buffer
       - react-native-b4a
 
-  '@boringos/connector-slack@0.2.8(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))':
+  '@boringos/connector-google@0.2.8(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))':
     dependencies:
-      '@boringos/module-sdk': 0.10.0(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
+      '@boringos/module-sdk': 0.10.0(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
       '@boringos/shared': 0.1.8
     transitivePeerDependencies:
       - '@boringos/drive'
@@ -2805,22 +2918,46 @@ snapshots:
       - bare-buffer
       - react-native-b4a
 
-  '@boringos/core@0.2.5(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))(drizzle-orm@0.41.0(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))(kysely@0.28.17)(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3))(zod@4.4.3)':
+  '@boringos/connector-slack@0.2.11(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))':
     dependencies:
-      '@boringos/agent': 0.1.17(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))(kysely@0.28.17)(pg@8.21.0)
-      '@boringos/connector-google': 0.2.8(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
-      '@boringos/connector-slack': 0.2.8(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
-      '@boringos/db': 0.1.9(kysely@0.28.17)(pg@8.21.0)
-      '@boringos/drive': 0.1.9(kysely@0.28.17)(pg@8.21.0)
+      '@boringos/module-sdk': 0.13.0(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
+      '@boringos/shared': 0.1.8
+    transitivePeerDependencies:
+      - '@boringos/drive'
+      - '@boringos/memory'
+      - '@boringos/ui'
+      - bare-abort-controller
+      - bare-buffer
+      - react-native-b4a
+
+  '@boringos/connector-slack@0.2.8(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))':
+    dependencies:
+      '@boringos/module-sdk': 0.10.0(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
+      '@boringos/shared': 0.1.8
+    transitivePeerDependencies:
+      - '@boringos/drive'
+      - '@boringos/memory'
+      - '@boringos/ui'
+      - bare-abort-controller
+      - bare-buffer
+      - react-native-b4a
+
+  '@boringos/core@0.4.0(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))(drizzle-orm@0.45.2(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))(kysely@0.28.17)(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3))(zod@4.4.3)':
+    dependencies:
+      '@boringos/agent': 0.3.1(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))(kysely@0.28.17)(pg@8.21.0)
+      '@boringos/connector-google': 0.2.11(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
+      '@boringos/connector-slack': 0.2.11(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
+      '@boringos/db': 0.2.0(kysely@0.28.17)(pg@8.21.0)
+      '@boringos/drive': 0.1.10(kysely@0.28.17)(pg@8.21.0)
       '@boringos/memory': 0.1.9
-      '@boringos/module-sdk': 0.10.0(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
+      '@boringos/module-sdk': 0.13.0(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))
       '@boringos/pipeline': 0.1.9
       '@boringos/runtime': 0.1.9
       '@boringos/shared': 0.1.8
       '@hono/node-server': 1.19.14(hono@4.12.23)
       '@types/adm-zip': 0.5.8
       adm-zip: 0.5.17
-      better-auth: 1.6.11(drizzle-orm@0.41.0(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3))
+      better-auth: 1.6.11(drizzle-orm@0.45.2(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3))
       hono: 4.12.23
       zod-to-json-schema: 3.25.2(zod@4.4.3)
     transitivePeerDependencies:
@@ -2874,7 +3011,7 @@ snapshots:
       - vue
       - zod
 
-  '@boringos/db@0.1.9(kysely@0.28.17)(pg@8.21.0)':
+  '@boringos/db@0.2.0(kysely@0.28.17)(pg@8.21.0)':
     dependencies:
       '@boringos/shared': 0.1.8
       drizzle-orm: 0.41.0(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9)
@@ -2911,9 +3048,9 @@ snapshots:
       - sql.js
       - sqlite3
 
-  '@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0)':
+  '@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0)':
     dependencies:
-      '@boringos/db': 0.1.9(kysely@0.28.17)(pg@8.21.0)
+      '@boringos/db': 0.2.0(kysely@0.28.17)(pg@8.21.0)
       '@boringos/shared': 0.1.8
     transitivePeerDependencies:
       - '@aws-sdk/client-rds-data'
@@ -2949,7 +3086,7 @@ snapshots:
     dependencies:
       '@boringos/shared': 0.1.8
 
-  '@boringos/module-sdk@0.10.0(@boringos/drive@0.1.9(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))':
+  '@boringos/module-sdk@0.10.0(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))':
     dependencies:
       '@boringos/shared': 0.1.8
       archiver: 7.0.1
@@ -2957,7 +3094,23 @@ snapshots:
       yauzl: 3.3.1
       zod: 3.25.76
     optionalDependencies:
-      '@boringos/drive': 0.1.9(kysely@0.28.17)(pg@8.21.0)
+      '@boringos/drive': 0.1.10(kysely@0.28.17)(pg@8.21.0)
+      '@boringos/memory': 0.1.9
+      '@boringos/ui': 0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - react-native-b4a
+
+  '@boringos/module-sdk@0.13.0(@boringos/drive@0.1.10(kysely@0.28.17)(pg@8.21.0))(@boringos/memory@0.1.9)(@boringos/ui@0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6))':
+    dependencies:
+      '@boringos/shared': 0.1.8
+      archiver: 7.0.1
+      esbuild: 0.25.12
+      yauzl: 3.3.1
+      zod: 3.25.76
+    optionalDependencies:
+      '@boringos/drive': 0.1.10(kysely@0.28.17)(pg@8.21.0)
       '@boringos/memory': 0.1.9
       '@boringos/ui': 0.1.9(react-router-dom@7.16.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
     transitivePeerDependencies:
@@ -3667,10 +3820,10 @@ snapshots:
 
   baseline-browser-mapping@2.10.32: {}
 
-  better-auth@1.6.11(drizzle-orm@0.41.0(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3)):
+  better-auth@1.6.11(drizzle-orm@0.45.2(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3)):
     dependencies:
       '@better-auth/core': 1.6.11(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0)
-      '@better-auth/drizzle-adapter': 1.6.11(@better-auth/core@1.6.11(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(drizzle-orm@0.41.0(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))
+      '@better-auth/drizzle-adapter': 1.6.11(@better-auth/core@1.6.11(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(drizzle-orm@0.45.2(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9))
       '@better-auth/kysely-adapter': 1.6.11(@better-auth/core@1.6.11(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(kysely@0.28.17)
       '@better-auth/memory-adapter': 1.6.11(@better-auth/core@1.6.11(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)
       '@better-auth/mongo-adapter': 1.6.11(@better-auth/core@1.6.11(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-call@1.3.5(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)
@@ -3687,7 +3840,7 @@ snapshots:
       nanostores: 1.3.0
       zod: 4.4.3
     optionalDependencies:
-      drizzle-orm: 0.41.0(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9)
+      drizzle-orm: 0.45.2(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9)
       pg: 8.21.0
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
@@ -3867,6 +4020,12 @@ snapshots:
       dequal: 2.0.3
 
   drizzle-orm@0.41.0(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9):
+    optionalDependencies:
+      kysely: 0.28.17
+      pg: 8.21.0
+      postgres: 3.4.9
+
+  drizzle-orm@0.45.2(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9):
     optionalDependencies:
       kysely: 0.28.17
       pg: 8.21.0

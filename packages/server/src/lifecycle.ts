@@ -23,9 +23,11 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type {
+  AgentSeed,
   ModuleFactoryDeps,
   ModuleLifecycle,
 } from "@boringos/module-sdk";
+import { Lifecycle } from "@boringos/module-sdk";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { DEFAULT_PIPELINE_STAGES } from "@boringos-crm/shared";
 import { pipelines, pipelineStages } from "./schema/pipelines.js";
@@ -67,16 +69,15 @@ export function createCrmLifecycle(
     async onInstall(ctx) {
       const tenantId = ctx.tenantId;
 
-      // Idempotency: if any prior install attempt left CRM agents /
-      // workflows / routines behind, scrub them before seeding fresh.
-      // Without this, repeated install calls would double-seed
-      // (12 agents, 16 workflows, 8 routines after two installs).
-      // Schema migrations are tracked separately so they no-op on
-      // re-install — we only need to dedupe the lifecycle seeds.
-      await scrubCrmSeeds(db, tenantId);
+      // MDK T8.3 — agents migrated to Lifecycle.seed. The framework's
+      // __seed_meta + content-hash idempotency replaces the heavy
+      // scrubCrmSeeds prelude for the agents path. Workflows +
+      // routines still need scrub-then-insert because they reference
+      // agent ids the framework's runSeed doesn't yet return; that
+      // migration rides on a future SeedResult enhancement.
+      await scrubCrmSeeds(db, tenantId, { keepAgents: true });
 
       await seedPipeline(db, tenantId);
-      await seedSlack(db, tenantId);
 
       const runtimeId = await fetchClaudeRuntimeId(db, tenantId);
       if (!runtimeId) {
@@ -86,15 +87,18 @@ export function createCrmLifecycle(
         return;
       }
 
-      const rootAgentId = await fetchRootAgentId(db, tenantId);
-      if (!rootAgentId) {
-        console.warn(
-          `[crm.onInstall] No root agent for tenant ${tenantId} — skipping agent + workflow seed. The framework's onTenantCreated should create one before CRM install.`,
-        );
-        return;
-      }
+      // Lifecycle.seed walks the AgentSeed list, looks up the
+      // tenant's root agent + runtime, and writes idempotently
+      // against __seed_meta. The first call inserts; subsequent
+      // calls (or hot-reloads) no-op unless the seed payload bumps.
+      const agentSeeds = buildCrmAgentSeeds();
+      await Lifecycle.seed(ctx, { agents: agentSeeds });
 
-      const agents = await seedAgents(db, tenantId, runtimeId, rootAgentId);
+      // The remaining seeders still need the seeded agent ids to
+      // wire governing_agent_id / assignee_agent_id, so we re-fetch
+      // them here. T8.4 may expose a richer SeedResult for chained
+      // references; until then, look up via (tenantId, source_app_id).
+      const agents = await fetchSeededCrmAgentIds(db, tenantId);
       await seedWorkflows(db, tenantId, agents);
       await seedRoutines(db, tenantId, agents);
     },
@@ -210,7 +214,11 @@ export function createCrmLifecycle(
 // (the schema migration is tracked separately).
 // ─────────────────────────────────────────────────────────────────
 
-async function scrubCrmSeeds(db: PostgresJsDatabase, tenantId: string) {
+async function scrubCrmSeeds(
+  db: PostgresJsDatabase,
+  tenantId: string,
+  opts: { keepAgents?: boolean } = {},
+) {
   const rolesIn = sql.join(
     CRM_AGENT_ROLES.map((r) => sql`${r}`),
     sql`, `,
@@ -240,6 +248,21 @@ async function scrubCrmSeeds(db: PostgresJsDatabase, tenantId: string) {
       )
   `);
   await db.execute(sql`
+    DELETE FROM workflow_runs
+    WHERE workflow_id IN (
+      SELECT id FROM workflows
+      WHERE tenant_id = ${tenantId} AND name IN (${namesIn})
+    )
+  `);
+  await db.execute(sql`
+    DELETE FROM workflows
+    WHERE tenant_id = ${tenantId} AND name IN (${namesIn})
+  `);
+  // MDK T8.3 — agents migrated to Lifecycle.seed, which handles its
+  // own idempotency via __seed_meta. Skip the agent cascade unless
+  // the caller explicitly requests it (e.g. onUninstall).
+  if (opts.keepAgents) return;
+  await db.execute(sql`
     DELETE FROM cost_events
     WHERE run_id IN (
       SELECT id FROM agent_runs
@@ -264,17 +287,6 @@ async function scrubCrmSeeds(db: PostgresJsDatabase, tenantId: string) {
     )
   `);
   await db.execute(sql`
-    DELETE FROM workflow_runs
-    WHERE workflow_id IN (
-      SELECT id FROM workflows
-      WHERE tenant_id = ${tenantId} AND name IN (${namesIn})
-    )
-  `);
-  await db.execute(sql`
-    DELETE FROM workflows
-    WHERE tenant_id = ${tenantId} AND name IN (${namesIn})
-  `);
-  await db.execute(sql`
     UPDATE tasks SET assignee_agent_id = NULL
     WHERE assignee_agent_id IN (
       SELECT id FROM agents
@@ -292,6 +304,59 @@ async function scrubCrmSeeds(db: PostgresJsDatabase, tenantId: string) {
     DELETE FROM agents
     WHERE tenant_id = ${tenantId} AND role IN (${rolesIn})
   `);
+}
+
+// MDK T8.3 — declarative CRM agent definitions. Lifecycle.seed
+// resolves runtime + reportsTo, so we just describe what we want.
+// `seedId` defaults to `name` in @boringos/module-sdk's runSeed; the
+// names below are stable across versions so the upgrade-policy thread
+// (T7.2) follows the right row.
+function buildCrmAgentSeeds(): AgentSeed[] {
+  const instructions = ""; // SKILL.md carries behaviour
+  return [
+    { name: "CRM Email Lens", persona: "email-lens", instructions },
+    { name: "Contact Enrichment", persona: "enrichment-contact", instructions },
+    { name: "Company Enrichment", persona: "enrichment-company", instructions },
+    { name: "Deal Analyst", persona: "deal-analyst", instructions },
+    { name: "Follow-up Writer", persona: "follow-up-writer", instructions },
+    { name: "Meeting Prep", persona: "meeting-prep", instructions },
+    { name: "CRM Maintenance", persona: "crm-maintenance", instructions },
+  ];
+}
+
+// Re-fetch the agent ids Lifecycle.seed wrote so seedWorkflows /
+// seedRoutines can wire governing_agent_id / assignee_agent_id. The
+// framework currently doesn't expose the name→id map from
+// Lifecycle.seed; a future SeedResult enhancement would let us
+// thread these without the extra round-trip.
+async function fetchSeededCrmAgentIds(
+  db: PostgresJsDatabase,
+  tenantId: string,
+): Promise<SeededAgents> {
+  const rows = (await db.execute(sql`
+    SELECT id, role FROM agents
+    WHERE tenant_id = ${tenantId}
+      AND source = 'app'
+      AND source_app_id = 'crm'
+  `)) as unknown as Array<{ id: string; role: string }>;
+  const byRole = new Map(rows.map((r) => [r.role, r.id]));
+  const need = (role: string) => {
+    const id = byRole.get(role);
+    if (!id)
+      throw new Error(
+        `[crm.onInstall] expected agent role "${role}" missing after Lifecycle.seed`,
+      );
+    return id;
+  };
+  return {
+    emailLensId: need("email-lens"),
+    enrichmentContactId: need("enrichment-contact"),
+    enrichmentCompanyId: need("enrichment-company"),
+    dealAnalystId: need("deal-analyst"),
+    followUpId: need("follow-up-writer"),
+    meetingPrepId: need("meeting-prep"),
+    maintenanceId: need("crm-maintenance"),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -334,15 +399,11 @@ async function seedPipeline(db: PostgresJsDatabase, tenantId: string) {
   }
 }
 
-async function seedSlack(db: PostgresJsDatabase, tenantId: string) {
-  const slackBotToken = process.env.SLACK_BOT_TOKEN;
-  if (!slackBotToken) return;
-  await db.execute(sql`
-    INSERT INTO connectors (id, tenant_id, kind, status, config, credentials, created_at, updated_at)
-    VALUES (${randomUUID()}, ${tenantId}, 'slack', 'active', '{}',
-      ${JSON.stringify({ accessToken: slackBotToken })}::jsonb, now(), now())
-  `);
-}
+// MDK T8.3 — seedSlack removed. Wrote to the legacy v1 `connectors`
+// table (single row per provider). The current path is the v2
+// AuthManager + connector_accounts, exposed via
+// `/api/connectors/oauth/slack/authorize`. The env-gated bot-token
+// shortcut never worked in production with v2.
 
 async function fetchClaudeRuntimeId(
   db: PostgresJsDatabase,
@@ -362,19 +423,10 @@ async function fetchClaudeRuntimeId(
 // tenant" via a unique partial index on agents(tenant_id) WHERE
 // reports_to IS NULL — so we must NOT seed CRM agents with a NULL
 // reports_to, or install fails on the second agent.
-async function fetchRootAgentId(
-  db: PostgresJsDatabase,
-  tenantId: string,
-): Promise<string | null> {
-  const result = await db.execute(sql`
-    SELECT id FROM agents
-    WHERE tenant_id = ${tenantId} AND reports_to IS NULL
-    ORDER BY created_at ASC
-    LIMIT 1
-  `);
-  const row = (result as unknown as Array<{ id: string }>)[0];
-  return row?.id ?? null;
-}
+// MDK T8.3 — fetchRootAgentId + seedAgents removed; Lifecycle.seed
+// (in @boringos/agent's install-manager) handles root-agent lookup
+// and the FK-safe inserts now. Workflow / routine seeds still need
+// the agent ids; they come back via `fetchSeededCrmAgentIds`.
 
 interface SeededAgents {
   emailLensId: string;
@@ -384,46 +436,6 @@ interface SeededAgents {
   followUpId: string;
   meetingPrepId: string;
   maintenanceId: string;
-}
-
-async function seedAgents(
-  db: PostgresJsDatabase,
-  tenantId: string,
-  runtimeId: string,
-  rootAgentId: string,
-): Promise<SeededAgents> {
-  const ids: SeededAgents = {
-    emailLensId: randomUUID(),
-    enrichmentContactId: randomUUID(),
-    enrichmentCompanyId: randomUUID(),
-    dealAnalystId: randomUUID(),
-    followUpId: randomUUID(),
-    meetingPrepId: randomUUID(),
-    maintenanceId: randomUUID(),
-  };
-
-  // SKILL.md (loaded by v2-skills via the role gate) carries the
-  // behavioural prompt. Per-instance instructions stay empty.
-  const instructions = "";
-
-  const seeds: Array<[string, string, string]> = [
-    [ids.emailLensId, "CRM Email Lens", "email-lens"],
-    [ids.enrichmentContactId, "Contact Enrichment", "enrichment-contact"],
-    [ids.enrichmentCompanyId, "Company Enrichment", "enrichment-company"],
-    [ids.dealAnalystId, "Deal Analyst", "deal-analyst"],
-    [ids.followUpId, "Follow-up Writer", "follow-up-writer"],
-    [ids.meetingPrepId, "Meeting Prep", "meeting-prep"],
-    [ids.maintenanceId, "CRM Maintenance", "crm-maintenance"],
-  ];
-
-  for (const [id, name, role] of seeds) {
-    await db.execute(sql`
-      INSERT INTO agents (id, tenant_id, name, role, status, instructions, runtime_id, reports_to, created_at, updated_at)
-      VALUES (${id}, ${tenantId}, ${name}, ${role}, 'idle', ${instructions}, ${runtimeId}, ${rootAgentId}, now(), now())
-    `);
-  }
-
-  return ids;
 }
 
 // ─────────────────────────────────────────────────────────────────
