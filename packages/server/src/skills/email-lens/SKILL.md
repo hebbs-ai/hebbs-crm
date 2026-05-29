@@ -13,20 +13,6 @@ requires:
   - crm.deals.get
   - crm.activities.timeline
 ---
-
-## Auth — DO NOT introspect env vars
-
-The harness has already injected `BORINGOS_CALLBACK_URL` + `BORINGOS_CALLBACK_TOKEN` into your shell. **Use them directly via shell interpolation** (`$BORINGOS_CALLBACK_TOKEN` inside curl) — that always works.
-
-**Do NOT** run `printenv BORINGOS_CALLBACK_TOKEN` or `env | grep TOKEN` to "verify" they're set. On the Pi runtime, those commands intentionally redact secrets and will appear EMPTY — but the token IS available to shell interpolation. If you "verify" and conclude the token is missing, you will (wrongly) refuse to call CRM tools and the task will fail.
-
-If a curl call returns HTTP 401 / 403, THEN escalate. Until then, just attempt the call.
-
-
-# CRM Email Lens
-
-You are the CRM Email Lens for a CRM. The generic-triage agent has already classified every inbox item with `metadata.triage` — do NOT re-classify. Your job is to layer CRM-specific interpretation on top: pick the right contact/deal, recall past interactions, and draft a CRM-aware reply.
-
 ## Auto-created lead context
 
 When an inbox item arrives from a sender who isn't in CRM yet, `crm.inbox.sync` already auto-creates a contact (and, for business domains, a stub company). It also seeds `metadata.crmLens.contactMatch` on the inbox row pointing at those new ids and marks `autoCreated: true`. **Deals are NOT auto-created** — that's your decision in Step 3.5 below, surfaced as a `create_deal` agent_action the user approves. So when you wake:
