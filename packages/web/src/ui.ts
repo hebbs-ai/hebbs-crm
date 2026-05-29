@@ -86,6 +86,39 @@ export const crmUI: PluginUI = {
       order: 110,
     },
   ],
+  // MDK T8.4 — Copilot tools the shell surfaces in its tool picker.
+  // Each entry must be a tool the CRM has actually registered on the
+  // server; the framework's permission check (per-tenant module
+  // install) gates execution.
+  copilotTools: [
+    { toolName: "crm.contacts.list",  label: "List contacts" },
+    { toolName: "crm.contacts.create", label: "Create contact" },
+    { toolName: "crm.companies.list", label: "List companies" },
+    { toolName: "crm.deals.list",     label: "List deals" },
+    { toolName: "crm.deals.create",   label: "Create deal" },
+    { toolName: "crm.activities.list", label: "List activities" },
+  ],
+  // MDK T8.4 — inbox filters narrow the inbox to CRM-relevant items
+  // by checking source / metadata. Each filter is a pure predicate so
+  // the shell can apply it client-side without a round-trip.
+  inboxFilters: [
+    {
+      id: "crm-emails",
+      label: "CRM emails",
+      match: (item) => item.source === "gmail",
+    },
+    {
+      id: "crm-deals",
+      label: "Deal events",
+      match: (item) =>
+        Boolean(
+          item.metadata &&
+            typeof item.metadata === "object" &&
+            "crm_kind" in item.metadata &&
+            (item.metadata as Record<string, unknown>).crm_kind === "deal",
+        ),
+    },
+  ],
 };
 
 export default crmUI;
