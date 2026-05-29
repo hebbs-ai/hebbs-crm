@@ -1,0 +1,50 @@
+name: MDK Acceptance
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Cross-repo MDK acceptance gate (MDK T8.6).
+#
+# CRM consumes `@boringos/*` from npm — no `link:` deps anywhere — so
+# this workflow proves the *published* SDK surface works against the
+# CRM module on a clean machine. If a framework release breaks the
+# CRM, this run goes red and we catch it before the next CRM deploy.
+#
+# Runs: typecheck → build → test:run across the CRM monorepo (server
+# + web + shared). No secrets required.
+
+concurrency:
+  group: mdk-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    name: typecheck + build + test against published @boringos/*
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install (frozen — proves the lockfile + published deps resolve)
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Test
+        run: pnpm test:run
