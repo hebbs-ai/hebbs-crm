@@ -46,9 +46,14 @@ export const createCrmModule: ModuleFactory = (factoryDeps) => {
   const module: Module = {
     id: "crm",
     name: "CRM",
-    version: "0.2.0",
+    // T8.2 — module.json on disk is trimmed to pack-time-only fields
+    // (entry, ui, publisher, license, minFrameworkVersion). Everything
+    // else flows from this factory through pack-hebbsmod's
+    // mergeManifest. Single source of truth = the factory.
+    version: "0.3.0",
     description:
       "Sales CRM — contacts, companies, deals, pipelines, activities. Ships specialised agents for triage, enrichment, deal analysis, follow-up writing, and meeting prep.",
+    kind: "module",
     defaultInstall: false,
     provides: ["crm-source", "crm-actions"],
     dependsOn: [
